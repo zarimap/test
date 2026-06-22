@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoGuessFree - 完全無料の全世界乱数ジオゲ</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://unpkg.com/mapillary-js@4.1.0/dist/mapillary.css" rel="stylesheet" />
+    
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --dark-bg: #111827;
+            --panel-bg: rgba(17, 24, 39, 0.85);
+            --text-light: #f3f4f6;
+            --text-muted: #9ca3af;
+            --radius: 12px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--dark-bg);
+            color: var(--text-light);
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ストリートビュー（Mapillary）のコンテナ */
+        #mly-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background-color: #000;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+        }
+
+        .interactive {
+            pointer-events: auto;
+        }
+
+        #header-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(8px);
+            padding: 15px 25px;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: fit-content;
+            min-width: 450px;
+            border: 1px solid rgba(255,255,255,0.1);
+            align-self: center;
+        }
+
+        .game-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            background: linear-gradient(45deg, #3b82f6, #10b981);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stats-container {
+            display: flex;
+            gap: 20px;
+        }
+
+        .stat-box {
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+
+        .stat-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        #timer-widget {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(8px);
+            padding: 10px 18px;
+            border-radius: var(--radius);
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            min-width: 130px;
+        }
+
+        #timer-display {
+            font-size: 1.6rem;
+            font-weight: 800;
+            font-family: 'Courier New', Courier, monospace;
+            color: #fbbf24;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+        }
+
+        #timer-display.disabled {
+            color: var(--text-muted);
+            text-shadow: none;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 32px;
+            height: 18px;
+            background: #4b5563;
+            border-radius: 9px;
+            transition: var(--transition);
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 14px;
+            height: 14px;
+            background: white;
+            border-radius: 50%;
+            transition: var(--transition);
+        }
+
+        input[type="checkbox"]:checked + .toggle-switch {
+            background: var(--primary-color);
+        }
+
+        input[type="checkbox"]:checked + .toggle-switch::after {
+            left: 16px;
+        }
+
+        #control-panel {
+            position: absolute;
+            left: 20px;
+            bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .btn {
+            background: var(--panel-bg);
+            backdrop-filter: blur(8px);
+            color: var(--text-light);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 14px 24px;
+            border-radius: var(--radius);
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            transition: var(--transition);
+        }
+
+        .btn:hover {
+            background: rgba(37, 99, 235, 0.2);
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+        }
+
+        .btn-primary { background: var(--primary-color); border: none; }
+        .btn-primary:hover { background: var(--primary-hover); box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }
+        .btn-success { background: var(--success-color); border: none; width: 100%; justify-content: center; font-size: 1.1rem; padding: 16px; }
+        .btn-success:hover { background: #059669; box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
+        .btn-success:disabled { background: #4b5563; color: var(--text-muted); cursor: not-allowed; box-shadow: none; transform: none; }
+
+        #map-wrapper {
+            position: absolute;
+            right: 20px;
+            bottom: 20px;
+            width: 360px;
+            height: 280px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(8px);
+            border-radius: var(--radius);
+            padding: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: width 0.4s cubic-bezier(0.25, 1, 0.5, 1), height 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #map-wrapper.expanded { width: 600px; height: 450px; }
+        #map-wrapper.minimized { width: 120px; height: 48px; overflow: hidden; }
+
+        #map-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 8px 8px 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            margin-bottom: 6px;
+        }
+
+        #map-header span { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
+        .map-toggle-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px; }
+        .map-toggle-btn:hover { color: var(--text-light); background: rgba(255,255,255,0.1); }
+        
+        #guess-map { 
+            width: 100%; 
+            flex-grow: 1; 
+            border-radius: calc(var(--radius) - 4px); 
+            background-color: #1e1e1e; 
+        }
+        #map-footer { margin-top: 8px; }
+
+        #modal-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 15, 30, 0.85);
+            backdrop-filter: blur(12px);
+            z-index: 100;
+            display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.5s ease;
+        }
+
+        #modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-card {
+            background: #1f2937; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
+            padding: 40px; width: 90%; max-width: 650px; text-align: center;
+            transform: scale(0.9); transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        #modal-overlay.active .modal-card { transform: scale(1); }
+
+        .modal-title { font-size: 2rem; font-weight: 800; margin-bottom: 15px; background: linear-gradient(45deg, #60a5fa, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .modal-desc { color: var(--text-muted); font-size: 1rem; line-height: 1.6; margin-bottom: 30px; }
+        .round-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 35px; }
+        .summary-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: var(--radius); }
+        .summary-label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; }
+        .summary-value { font-size: 1.4rem; font-weight: 700; }
+        .summary-value.highlight { color: #fbbf24; }
+
+        #splash-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            z-index: 200; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: opacity 0.6s ease;
+        }
+
+        .logo-animation { font-size: 3.5rem; font-weight: 900; letter-spacing: 2px; margin-bottom: 10px; background: linear-gradient(135deg, #3b82f6 0%, #10b981 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .loader { width: 48px; height: 48px; border: 5px solid rgba(255,255,255,0.1); border-bottom-color: var(--primary-color); border-radius: 50%; display: inline-block; animation: rotation 1s linear infinite; margin-top: 30px; }
+        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        #mini-map-blocker { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: transparent; z-index: 99; display: none; }
+        #mini-map-blocker.active { display: block; }
+        #loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 50; display: flex; justify-content: center; align-items: center; color: white; font-size: 1.5rem; font-weight: bold; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        #loading-overlay.active { opacity: 1; pointer-events: auto; }
+
+        /* Leafletのダークモード用CSS調整 */
+        .leaflet-container {
+            background: #111827 !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="splash-screen">
+        <div class="logo-animation">GeoGuessFree</div>
+        <p style="color: var(--text-muted); font-size: 1.1rem;">Mapillary × Leaflet による完全無料ストリートビューゲーム</p>
+        <div id="start-loading" class="loader"></div>
+        <button id="start-game-btn" class="btn btn-primary" style="display: none; margin-top: 25px; padding: 16px 40px; font-size: 1.2rem;">ゲームを開始する</button>
+    </div>
+
+    <div id="game-container">
+        <div id="mly-container"></div>
+        <div id="loading-overlay">🌐 無料の陸地ポイントを探しています...</div>
+
+        <div id="ui-layer">
+            <div id="header-panel" class="interactive">
+                <div class="game-title">GeoGuess</div>
+                <div class="stats-container">
+                    <div class="stat-box">
+                        <div class="stat-label">Round</div>
+                        <div id="stat-round" class="stat-value">1 / 5</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Round Score</div>
+                        <div id="stat-score" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Total Score</div>
+                        <div id="stat-total" class="stat-value">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="timer-widget" class="interactive">
+                <div class="stat-label">Time Remaining</div>
+                <div id="timer-display">03:00</div>
+                <label class="toggle-container">
+                    <input type="checkbox" id="timer-toggle" checked style="display: none;">
+                    <div class="toggle-switch"></div>
+                    <span>タイマー有効</span>
+                </label>
+            </div>
+
+            <div id="control-panel" class="interactive">
+                <button id="btn-reset-pano" class="btn" title="開始位置に戻ります">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
+                    スタート位置に戻る
+                </button>
+            </div>
+
+            <div id="map-wrapper" class="interactive">
+                <div id="map-header">
+                    <span>推測マップ</span>
+                    <div>
+                        <button id="btn-map-size" class="map-toggle-btn">拡大/縮小</button>
+                        <button id="btn-map-minimize" class="map-toggle-btn">最小化</button>
+                    </div>
+                </div>
+                <div style="position: relative; flex-grow: 1; display: flex; flex-direction: column;">
+                    <div id="guess-map"></div>
+                    <div id="mini-map-blocker"></div>
+                </div>
+                <div id="map-footer">
+                    <button id="btn-guess" class="btn btn-success" disabled>GUESS (位置を確定)</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-overlay">
+            <div class="modal-card">
+                <h2 id="modal-title" class="modal-title">ラウンドリザルト</h2>
+                <p id="modal-desc" class="modal-desc">結果データが入ります。</p>
+                
+                <div class="round-summary-grid">
+                    <div class="summary-box">
+                        <div class="summary-label">誤差距離</div>
+                        <div id="summary-distance" class="summary-value">0 km</div>
+                    </div>
+                    <div class="summary-box">
+                        <div class="summary-label">獲得スコア</div>
+                        <div id="summary-score" class="summary-value highlight">0</div>
+                    </div>
+                    <div class="summary-box">
+                        <div class="summary-label">累計スコア</div>
+                        <div id="summary-total" class="summary-value">0</div>
+                    </div>
+                </div>
+
+                <button id="btn-modal-action" class="btn btn-primary" style="width: 100%; justify-content: center; font-size: 1.1rem; padding: 14px;">次のラウンドへ</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/mapillary-js@4.1.0/dist/mapillary.js"></script>
+
+    <script>
+        // ⚠️ ここにMapillaryのデベロッパーダッシュボードから取得したトークンを入れてください
+        const MAPILLARY_TOKEN = "MLY|28468545339401864|e94ee5fbc72c6b02d41c0d00dc13f20d";
+
+        let mlyViewer;
+        let guessMap;
+        
+        // Leafletのオブジェクト管理
+        let activeMarker = null;
+        let solutionMarker = null;
+        let resultPolyline = null;
+
+        let currentRoundIndex = 0;
+        let roundScore = 0;
+        let totalScore = 0;
+        let isRoundSettled = false;
+
+        // スタート位置の画像IDを保存（一発で戻れるようにする用）
+        let startImageId = null;
+
+        // タイマー系
+        let timerInterval = null;
+        let timeRemaining = 180;
+        let isTimerEnabled = true;
+
+        // ゲーム初期化
+        window.onload = function() {
+            setupDOMEvents();
+            setupMapSizeControls();
+            
+            document.getElementById('start-loading').style.display = 'none';
+            document.getElementById('start-game-btn').style.display = 'block';
+        };
+
+        function setupDOMEvents() {
+            document.getElementById('start-game-btn').addEventListener('click', () => {
+                document.getElementById('splash-screen').style.opacity = '0';
+                setTimeout(() => { document.getElementById('splash-screen').style.display = 'none'; }, 600);
+                bootstrapNewGame();
+            });
+
+            document.getElementById('btn-reset-pano').addEventListener('click', () => {
+                if (mlyViewer && startImageId && !isRoundSettled) {
+                    mlyViewer.moveTo(startImageId).catch(err => console.error(err));
+                }
+            });
+
+            document.getElementById('btn-guess').addEventListener('click', () => {
+                if (!activeMarker || isRoundSettled) return;
+                evaluateCurrentGuess();
+            });
+
+            document.getElementById('btn-modal-action').addEventListener('click', () => {
+                closeModal();
+                if (currentRoundIndex < 5) {
+                    advanceToNextRound();
+                } else {
+                    bootstrapNewGame();
+                }
+            });
+
+            const timerToggle = document.getElementById('timer-toggle');
+            timerToggle.addEventListener('change', (e) => {
+                isTimerEnabled = e.target.checked;
+                const display = document.getElementById('timer-display');
+                if (!isTimerEnabled) {
+                    clearInterval(timerInterval);
+                    display.innerText = "--:--";
+                    display.classList.add('disabled');
+                } else {
+                    display.classList.remove('disabled');
+                    if (!isRoundSettled && startImageId) {
+                        startTimer();
+                    }
+                }
+            });
+        }
+
+        function setupMapSizeControls() {
+            const wrapper = document.getElementById('map-wrapper');
+            document.getElementById('btn-map-size').addEventListener('click', () => {
+                wrapper.classList.remove('minimized');
+                wrapper.classList.toggle('expanded');
+                setTimeout(() => guessMap.invalidateSize(), 400);
+            });
+            document.getElementById('btn-map-minimize').addEventListener('click', () => {
+                wrapper.classList.remove('expanded');
+                wrapper.classList.toggle('minimized');
+                setTimeout(() => guessMap.invalidateSize(), 400);
+            });
+        }
+
+        function bootstrapNewGame() {
+            currentRoundIndex = 0;
+            totalScore = 0;
+            isRoundSettled = false;
+            document.getElementById('stat-total').innerText = '0';
+            
+            initEngineInstances();
+            advanceToNextRound();
+        }
+
+        function initEngineInstances() {
+            // 1. Mapillary Viewer の初期化 (最初はダミーID、後でmoveToする)
+            mlyViewer = new mapillary.Viewer({
+                accessToken: MAPILLARY_TOKEN,
+                container: 'mly-container',
+                component: { cover: false, direction: true }
+            });
+
+            // 2. Leaflet Map の初期化 (CartoDBのダークテーマを使用)
+            guessMap = L.map('guess-map', {
+                center: [20, 0],
+                zoom: 1,
+                zoomControl: true,
+                attributionControl: false
+            });
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19
+            }).addTo(guessMap);
+
+            guessMap.on('click', handleGuessMapClick);
+        }
+
+        // 無料で実用的なランダム座標（陸地のみ）をMapillary API経由で取得する
+        function findRandomMapillaryLocation(callback) {
+            document.getElementById('loading-overlay').classList.add('active');
+
+            // 世界の主要な陸地（都市部などが多いエリア）のバウンディングボックスからランダムにサンプリング
+            // 完全に純粋な乱数だと海に落ちるため、有効な写真がある確率が高い緯度経度レンジを狙う
+            const randLat = (Math.random() * 110) - 40; // -40度〜70度 (南米〜ヨーロッパ・アジア)
+            const randLng = (Math.random() * 360) - 180; // -180度〜180度
+
+            // 擬似ランダム点の周囲の画像をMapillaryのWebAPIで検索(半径およそ50km)
+            const radius = 0.5; 
+            const bbox = `${randLng - radius},${randLat - radius},${randLng + radius},${randLat + radius}`;
+            const url = `https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&bbox=${bbox}&fields=id,geometry&limit=1`;
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.data && data.data.length > 0) {
+                        const targetPhoto = data.data[0];
+                        document.getElementById('loading-overlay').classList.remove('active');
+                        // 写真IDと座標を返す
+                        callback(targetPhoto.id, targetPhoto.geometry.coordinates[1], targetPhoto.geometry.coordinates[0]);
+                    } else {
+                        // 写真が見つからなければ再帰的にリトライ
+                        findRandomMapillaryLocation(callback);
+                    }
+                })
+                .catch(err => {
+                    console.error("API Error, retrying...", err);
+                    findRandomMapillaryLocation(callback);
+                });
+        }
+
+        function advanceToNextRound() {
+            isRoundSettled = false;
+            currentRoundIndex++;
+
+            document.getElementById('stat-round').innerText = `${currentRoundIndex} / 5`;
+            document.getElementById('stat-score').innerText = '0';
+            document.getElementById('btn-guess').disabled = true;
+            document.getElementById('map-wrapper').classList.remove('expanded', 'minimized');
+            document.getElementById('mini-map-blocker').classList.remove('active');
+
+            // マーカー・ラインのリセット
+            if (activeMarker) { guessMap.removeLayer(activeMarker); activeMarker = null; }
+            if (solutionMarker) { guessMap.removeLayer(solutionMarker); solutionMarker = null; }
+            if (resultPolyline) { guessMap.removeLayer(resultPolyline); resultPolyline = null; }
+
+            // 地図操作の復活
+            guessMap.dragging.enable();
+            guessMap.scrollWheelZoom.enable();
+            guessMap.doubleClickZoom.enable();
+            guessMap.setView([20, 0], 1);
+
+            // 完全にランダムな実写ポイントを取得
+            findRandomMapillaryLocation((imageId, lat, lng) => {
+                startImageId = imageId;
+                window.targetLat = lat;
+                window.targetLng = lng;
+
+                // ビューワーを指定の画像へジャンプさせる
+                mlyViewer.moveTo(imageId).catch(err => console.error(err));
+
+                if (isTimerEnabled) {
+                    timeRemaining = 180;
+                    startTimer();
+                }
+            });
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            updateTimerDisplay();
+
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                updateTimerDisplay();
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    if (!activeMarker) {
+                        // ピンを指していない場合、仮で(0,0)に配置して強制決定
+                        activeMarker = L.marker([0, 0]);
+                    }
+                    evaluateCurrentGuess();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            if (!isTimerEnabled) return;
+            const minutes = Math.floor(timeRemaining / 60);
+            const seconds = timeRemaining % 60;
+            document.getElementById('timer-display').innerText = 
+                `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function handleGuessMapClick(event) {
+            if (isRoundSettled) return;
+            const clickedCoords = event.latlng;
+
+            if (!activeMarker) {
+                // Leafletの標準ピンを立てる
+                activeMarker = L.marker(clickedCoords, { draggable: true }).addTo(guessMap);
+                document.getElementById('btn-guess').disabled = false;
+            } else {
+                activeMarker.setLatLng(clickedCoords);
+            }
+        }
+
+        function evaluateCurrentGuess() {
+            isRoundSettled = true;
+            clearInterval(timerInterval);
+            document.getElementById('btn-guess').disabled = true;
+            document.getElementById('mini-map-blocker').classList.add('active');
+
+            // マップ操作をロック
+            guessMap.dragging.disable();
+            guessMap.scrollWheelZoom.disable();
+            guessMap.doubleClickZoom.disable();
+
+            const playerLatLng = activeMarker.getLatLng();
+            const solutionLatLng = L.latLng(window.targetLat, window.targetLng);
+
+            // 正解位置に緑の円型ピンを配置
+            solutionMarker = L.circleMarker(solutionLatLng, {
+                radius: 8, fillColor: '#10b981', color: '#ffffff', weight: 2, fillOpacity: 1
+            }).addTo(guessMap);
+
+            // 2点間をむすぶ線（Leaflet標準のPolyline）
+            resultPolyline = L.polyline([playerLatLng, solutionLatLng], {
+                color: '#fbbf24', weight: 3, dashArray: '5, 10'
+            }).addTo(guessMap);
+
+            // 大圏距離（球面上の距離）の計算
+            const distanceMeters = guessMap.distance(playerLatLng, solutionLatLng);
+            const distanceKilometers = distanceMeters / 1000;
+
+            // スコア計算公式
+            roundScore = Math.round(5000 * Math.exp(-distanceKilometers / 2000));
+            if (distanceKilometers <= 0.1) roundScore = 5000;
+
+            totalScore += roundScore;
+            document.getElementById('stat-score').innerText = roundScore;
+            document.getElementById('stat-total').innerText = totalScore;
+
+            document.getElementById('map-wrapper').classList.add('expanded');
+
+            // 2つのピンが両方綺麗に収まるようにカメラをオートズーム
+            setTimeout(() => {
+                const bounds = L.latLngBounds([playerLatLng, solutionLatLng]);
+                guessMap.fitBounds(bounds, { padding: [40, 40] });
+                
+                setTimeout(() => { presentRoundSummaryModal(distanceKilometers, roundScore); }, 1200);
+            }, 500);
+        }
+
+        function presentRoundSummaryModal(distance, score) {
+            document.getElementById('summary-distance').innerText = distance.toFixed(1) + ' km';
+            document.getElementById('summary-score').innerText = score.toLocaleString();
+            document.getElementById('summary-total').innerText = totalScore.toLocaleString();
+
+            const titleElement = document.getElementById('modal-title');
+            const descElement = document.getElementById('modal-desc');
+            const actionBtn = document.getElementById('btn-modal-action');
+
+            if (currentRoundIndex < 5) {
+                titleElement.innerText = `Round ${currentRoundIndex} 結果`;
+                descElement.innerText = `無料画像からランダム生成された正解地点との誤差です。`;
+                actionBtn.innerText = "次のラウンドへ";
+            } else {
+                titleElement.innerText = "🏆 ゲーム終了！";
+                descElement.innerText = `完全無料のオープンデータマップでの合計スコアは ${totalScore} 点でした！`;
+                actionBtn.innerText = "もう一度プレイする";
+            }
+            document.getElementById('modal-overlay').classList.add('active');
+        }
+
+        function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
+    </script>
+</body>
+</html>
