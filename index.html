@@ -412,6 +412,11 @@
     <script src="https://unpkg.com/mapillary-js@4.1.0/dist/mapillary.js"></script>
 
     <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            alert("エラー発生: " + message + " (行: " + lineno + ")");
+            return false;
+        };
+        
         // ⚠️ ここにMapillaryのデベロッパーダッシュボードから取得したトークンを入れてください
         const MAPILLARY_TOKEN = "MLY|26793847946961476|a5dc359ce0ca662c6fc6e52e87a288e0";
 
