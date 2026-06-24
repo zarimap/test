@@ -588,22 +588,20 @@
             guessMap.scrollWheelZoom.enable();
             guessMap.doubleClickZoom.enable();
             guessMap.setView([20, 0], 1);
+function advanceToNextRound() {
+    isRoundSettled = false;
+    currentRoundIndex++;
 
-            // 完全にランダムな実写ポイントを取得
-            findRandomMapillaryLocation((imageId, lat, lng) => {
-                startImageId = imageId;
-                window.targetLat = lat;
-                window.targetLng = lng;
+    // --- 中略 (元のコードのまま) ---
 
-                // ビューワーを指定の画像へジャンプさせる
-                mlyViewer.moveTo(imageId).catch(err => console.error(err));
-
-                if (isTimerEnabled) {
-                    timeRemaining = 180;
-                    startTimer();
-                }
-            });
-        }
+    // 👇 【テスト用】findRandomMapillaryLocation をスキップして東京タワー近くを強制表示
+    document.getElementById('loading-overlay').classList.remove('active');
+    startImageId = "4839849292777855"; // 実在するMapillaryの画像ID
+    window.targetLat = 35.6586;
+    window.targetLng = 139.7454;
+    mlyViewer.moveTo(startImageId).catch(err => console.error(err));
+    if (isTimerEnabled) { timeRemaining = 180; startTimer(); }
+}
 
         function startTimer() {
             clearInterval(timerInterval);
