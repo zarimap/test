@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeoGuessFree - 完全無料の全世界乱数ジオゲ</title>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link href="https://unpkg.com/mapillary-js@4.1.0/dist/mapillary.css" rel="stylesheet" />
     
@@ -43,7 +44,6 @@
             height: 100%;
         }
 
-        /* ストリートビュー（Mapillary）のコンテナ */
         #mly-container {
             position: absolute;
             top: 0;
@@ -257,12 +257,7 @@
         .map-toggle-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px; }
         .map-toggle-btn:hover { color: var(--text-light); background: rgba(255,255,255,0.1); }
         
-        #guess-map { 
-            width: 100%; 
-            flex-grow: 1; 
-            border-radius: calc(var(--radius) - 4px); 
-            background-color: #1e1e1e; 
-        }
+        #guess-map { width: 100%; flex-grow: 1; border-radius: calc(var(--radius) - 4px); background-color: #1e1e1e; }
         #map-footer { margin-top: 8px; }
 
         #modal-overlay {
@@ -306,20 +301,16 @@
 
         #mini-map-blocker { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: transparent; z-index: 99; display: none; }
         #mini-map-blocker.active { display: block; }
-        #loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 50; display: flex; justify-content: center; align-items: center; color: white; font-size: 1.5rem; font-weight: bold; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        #loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 50; display: flex; justify-content: center; align-items: center; color: white; font-size: 1.5rem; font-weight: bold; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; text-align: center; padding: 20px; }
         #loading-overlay.active { opacity: 1; pointer-events: auto; }
-
-        /* Leafletのダークモード用CSS調整 */
-        .leaflet-container {
-            background: #111827 !important;
-        }
+        .leaflet-container { background: #111827 !important; }
     </style>
 </head>
 <body>
 
     <div id="splash-screen">
         <div class="logo-animation">GeoGuessFree</div>
-        <p style="color: var(--text-muted); font-size: 1.1rem;">Mapillary × Leaflet による完全無料ストリートビューゲーム</p>
+        <p id="splash-status" style="color: var(--text-muted); font-size: 1.1rem; padding: 0 20px; text-align: center;">ライブラリをロード中...</p>
         <div id="start-loading" class="loader"></div>
         <button id="start-game-btn" class="btn btn-primary" style="display: none; margin-top: 25px; padding: 16px 40px; font-size: 1.2rem;">ゲームを開始する</button>
     </div>
@@ -412,12 +403,10 @@
 
     <script>
         // ⚠️ ここにMapillaryのデベロッパーダッシュボードから取得したトークンを入れてください
-        const MAPILLARY_TOKEN = "MLY|28468545339401864|e94ee5fbc72c6b02d41c0d00dc13f20d";
+        const MAPILLARY_TOKEN = "YOUR_MAPILLARY_CLIENT_TOKEN";
 
         let mlyViewer;
         let guessMap;
-        
-        // Leafletのオブジェクト管理
         let activeMarker = null;
         let solutionMarker = null;
         let resultPolyline = null;
@@ -426,21 +415,36 @@
         let roundScore = 0;
         let totalScore = 0;
         let isRoundSettled = false;
-
-        // スタート位置の画像IDを保存（一発で戻れるようにする用）
         let startImageId = null;
 
-        // タイマー系
         let timerInterval = null;
         let timeRemaining = 180;
         let isTimerEnabled = true;
 
-        // ゲーム初期化
+        // 【安全対策】エラー検知用のグローバルハンドラ
+        window.onerror = function(msg, url, line) {
+            const statusText = document.getElementById('splash-status');
+            if(statusText) {
+                statusText.innerHTML = `<span style="color:#ef4444; font-weight:bold;">❌ JavaScriptエラー発生 (行: ${line}):</span><br><small style="color:#9ca3af;">${msg}</small><br><br>トークンの貼り付け形式や、ネット接続を確認してください。`;
+                const loader = document.getElementById('start-loading');
+                if(loader) loader.style.display = 'none';
+            }
+            return false;
+        };
+
         window.onload = function() {
+            // トークンの簡易構文チェック
+            if (!MAPILLARY_TOKEN || MAPILLARY_TOKEN === "YOUR_MAPILLARY_CLIENT_TOKEN" || MAPILLARY_TOKEN.trim() === "") {
+                document.getElementById('splash-status').innerHTML = `<span style="color:#fbbf24; font-weight:bold;">⚠️ トークン未設定</span><br>コード内の MAPILLARY_TOKEN にトークンを入力してください。`;
+                document.getElementById('start-loading').style.display = 'none';
+                return;
+            }
+
             setupDOMEvents();
             setupMapSizeControls();
             
             document.getElementById('start-loading').style.display = 'none';
+            document.getElementById('splash-status').innerText = "Mapillary 連携準備完了！";
             document.getElementById('start-game-btn').style.display = 'block';
         };
 
@@ -513,14 +517,17 @@
         }
 
         function initEngineInstances() {
-            // 1. Mapillary Viewer の初期化 (最初はダミーID、後でmoveToする)
-            mlyViewer = new mapillary.Viewer({
-                accessToken: MAPILLARY_TOKEN,
-                container: 'mly-container',
-                component: { cover: false, direction: true }
-            });
+            try {
+                mlyViewer = new mapillary.Viewer({
+                    accessToken: MAPILLARY_TOKEN,
+                    container: 'mly-container',
+                    component: { cover: false, direction: true }
+                });
+            } catch (e) {
+                alert("Mapillary Viewerの初期化に失敗しました。トークンが不正な可能性があります。");
+                console.error(e);
+            }
 
-            // 2. Leaflet Map の初期化 (CartoDBのダークテーマを使用)
             guessMap = L.map('guess-map', {
                 center: [20, 0],
                 zoom: 1,
@@ -535,36 +542,36 @@
             guessMap.on('click', handleGuessMapClick);
         }
 
-        // 無料で実用的なランダム座標（陸地のみ）をMapillary API経由で取得する
         function findRandomMapillaryLocation(callback) {
             document.getElementById('loading-overlay').classList.add('active');
 
-            // 世界の主要な陸地（都市部などが多いエリア）のバウンディングボックスからランダムにサンプリング
-            // 完全に純粋な乱数だと海に落ちるため、有効な写真がある確率が高い緯度経度レンジを狙う
-            const randLat = (Math.random() * 110) - 40; // -40度〜70度 (南米〜ヨーロッパ・アジア)
+            // 陸地が多く、Mapillaryデータが豊富な主要緯度経度範囲をターゲットに乱数生成
+            const randLat = (Math.random() * 100) - 35; // -35度〜65度
             const randLng = (Math.random() * 360) - 180; // -180度〜180度
 
-            // 擬似ランダム点の周囲の画像をMapillaryのWebAPIで検索(半径およそ50km)
-            const radius = 0.5; 
+            const radius = 0.6; 
             const bbox = `${randLng - radius},${randLat - radius},${randLng + radius},${randLat + radius}`;
             const url = `https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&bbox=${bbox}&fields=id,geometry&limit=1`;
 
             fetch(url)
-                .then(res => res.json())
+                .then(res => {
+                    if(!res.ok) throw new Error("APIレスポンスエラー (トークンが失効しているか正しくありません)");
+                    return res.json();
+                })
                 .then(data => {
                     if (data && data.data && data.data.length > 0) {
                         const targetPhoto = data.data[0];
                         document.getElementById('loading-overlay').classList.remove('active');
-                        // 写真IDと座標を返す
                         callback(targetPhoto.id, targetPhoto.geometry.coordinates[1], targetPhoto.geometry.coordinates[0]);
                     } else {
-                        // 写真が見つからなければ再帰的にリトライ
+                        // ヒットしなければ即座に再試行
                         findRandomMapillaryLocation(callback);
                     }
                 })
                 .catch(err => {
-                    console.error("API Error, retrying...", err);
-                    findRandomMapillaryLocation(callback);
+                    console.error("通信エラー。リトライします...", err);
+                    document.getElementById('loading-overlay').innerHTML = `🌐 無料の陸地ポイントを探しています...<br><br><span style="color:#ef4444; font-size:0.9rem;">認証エラーが起きています。トークンを確認してください。</span>`;
+                    setTimeout(() => findRandomMapillaryLocation(callback), 3000);
                 });
         }
 
@@ -578,30 +585,28 @@
             document.getElementById('map-wrapper').classList.remove('expanded', 'minimized');
             document.getElementById('mini-map-blocker').classList.remove('active');
 
-            // マーカー・ラインのリセット
             if (activeMarker) { guessMap.removeLayer(activeMarker); activeMarker = null; }
             if (solutionMarker) { guessMap.removeLayer(solutionMarker); solutionMarker = null; }
             if (resultPolyline) { guessMap.removeLayer(resultPolyline); resultPolyline = null; }
 
-            // 地図操作の復活
             guessMap.dragging.enable();
             guessMap.scrollWheelZoom.enable();
             guessMap.doubleClickZoom.enable();
             guessMap.setView([20, 0], 1);
-function advanceToNextRound() {
-    isRoundSettled = false;
-    currentRoundIndex++;
 
-    // --- 中略 (元のコードのまま) ---
+            findRandomMapillaryLocation((imageId, lat, lng) => {
+                startImageId = imageId;
+                window.targetLat = lat;
+                window.targetLng = lng;
 
-    // 👇 【テスト用】findRandomMapillaryLocation をスキップして東京タワー近くを強制表示
-    document.getElementById('loading-overlay').classList.remove('active');
-    startImageId = "4839849292777855"; // 実在するMapillaryの画像ID
-    window.targetLat = 35.6586;
-    window.targetLng = 139.7454;
-    mlyViewer.moveTo(startImageId).catch(err => console.error(err));
-    if (isTimerEnabled) { timeRemaining = 180; startTimer(); }
-}
+                mlyViewer.moveTo(imageId).catch(err => console.error("画像の移動に失敗:", err));
+
+                if (isTimerEnabled) {
+                    timeRemaining = 180;
+                    startTimer();
+                }
+            });
+        }
 
         function startTimer() {
             clearInterval(timerInterval);
@@ -614,7 +619,6 @@ function advanceToNextRound() {
                 if (timeRemaining <= 0) {
                     clearInterval(timerInterval);
                     if (!activeMarker) {
-                        // ピンを指していない場合、仮で(0,0)に配置して強制決定
                         activeMarker = L.marker([0, 0]);
                     }
                     evaluateCurrentGuess();
@@ -635,7 +639,6 @@ function advanceToNextRound() {
             const clickedCoords = event.latlng;
 
             if (!activeMarker) {
-                // Leafletの標準ピンを立てる
                 activeMarker = L.marker(clickedCoords, { draggable: true }).addTo(guessMap);
                 document.getElementById('btn-guess').disabled = false;
             } else {
@@ -649,7 +652,6 @@ function advanceToNextRound() {
             document.getElementById('btn-guess').disabled = true;
             document.getElementById('mini-map-blocker').classList.add('active');
 
-            // マップ操作をロック
             guessMap.dragging.disable();
             guessMap.scrollWheelZoom.disable();
             guessMap.doubleClickZoom.disable();
@@ -657,21 +659,17 @@ function advanceToNextRound() {
             const playerLatLng = activeMarker.getLatLng();
             const solutionLatLng = L.latLng(window.targetLat, window.targetLng);
 
-            // 正解位置に緑の円型ピンを配置
             solutionMarker = L.circleMarker(solutionLatLng, {
                 radius: 8, fillColor: '#10b981', color: '#ffffff', weight: 2, fillOpacity: 1
             }).addTo(guessMap);
 
-            // 2点間をむすぶ線（Leaflet標準のPolyline）
             resultPolyline = L.polyline([playerLatLng, solutionLatLng], {
                 color: '#fbbf24', weight: 3, dashArray: '5, 10'
             }).addTo(guessMap);
 
-            // 大圏距離（球面上の距離）の計算
             const distanceMeters = guessMap.distance(playerLatLng, solutionLatLng);
             const distanceKilometers = distanceMeters / 1000;
 
-            // スコア計算公式
             roundScore = Math.round(5000 * Math.exp(-distanceKilometers / 2000));
             if (distanceKilometers <= 0.1) roundScore = 5000;
 
@@ -681,7 +679,6 @@ function advanceToNextRound() {
 
             document.getElementById('map-wrapper').classList.add('expanded');
 
-            // 2つのピンが両方綺麗に収まるようにカメラをオートズーム
             setTimeout(() => {
                 const bounds = L.latLngBounds([playerLatLng, solutionLatLng]);
                 guessMap.fitBounds(bounds, { padding: [40, 40] });
@@ -701,11 +698,11 @@ function advanceToNextRound() {
 
             if (currentRoundIndex < 5) {
                 titleElement.innerText = `Round ${currentRoundIndex} 結果`;
-                descElement.innerText = `無料画像からランダム生成された正解地点との誤差です。`;
+                descElement.innerText = `無料データから乱数抽出された正解地点との誤差です。`;
                 actionBtn.innerText = "次のラウンドへ";
             } else {
                 titleElement.innerText = "🏆 ゲーム終了！";
-                descElement.innerText = `完全無料のオープンデータマップでの合計スコアは ${totalScore} 点でした！`;
+                descElement.innerText = `合計スコアは ${totalScore} 点でした！`;
                 actionBtn.innerText = "もう一度プレイする";
             }
             document.getElementById('modal-overlay').classList.add('active');
