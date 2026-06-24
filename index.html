@@ -513,11 +513,15 @@
         }
 
         function initEngineInstances() {
-            // 1. Mapillary Viewer の初期化 (最初はダミーID、後でmoveToする)
+            // 1. Mapillary Viewer の初期化（コンテナだけを先に紐付ける）
             mlyViewer = new mapillary.Viewer({
                 accessToken: MAPILLARY_TOKEN,
                 container: 'mly-container',
-                component: { cover: false, direction: true }
+                component: { 
+                    cover: false, 
+                    direction: true,
+                    navigation: true // 移動用の矢印を表示
+                }
             });
 
             // 2. Leaflet Map の初期化 (CartoDBのダークテーマを使用)
@@ -534,7 +538,6 @@
 
             guessMap.on('click', handleGuessMapClick);
         }
-
         // 無料で実用的なランダム座標（陸地のみ）をMapillary API経由で取得する
         function findRandomMapillaryLocation(callback) {
             document.getElementById('loading-overlay').classList.add('active');
