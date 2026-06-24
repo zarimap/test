@@ -595,10 +595,10 @@
             // 1. ローディング画面を強制的に消す
             document.getElementById('loading-overlay').classList.remove('active');
 
-            // 2. 東京タワー付近の確実に見られる画像IDと座標をセット
-            startImageId = "4839849292777855"; 
-            window.targetLat = 35.6586;
-            window.targetLng = 139.7454;
+            // 2. 確実に見られる最新の画像IDと座標（例：アメリカの有名な道路）
+            startImageId = "646194767156947"; // 👈 このIDに変更してみてください
+            window.targetLat = 37.7749;
+            window.targetLng = -122.4194;
 
             // 3. ビューワーを指定の画像へジャンプさせる
             mlyViewer.moveTo(startImageId).catch(err => {
