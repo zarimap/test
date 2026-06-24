@@ -525,7 +525,7 @@
                 }
             });
 
-            // 2. Leaflet Map の初期化 (CartoDBのダークテーマを使用)
+            // 2. Leaflet Map の初期化
             guessMap = L.map('guess-map', {
                 center: [20, 0],
                 zoom: 1,
@@ -538,6 +538,12 @@
             }).addTo(guessMap);
 
             guessMap.on('click', handleGuessMapClick);
+
+            // 🔥 【修正ポイント】ビューワーがロードを完了するのを待ってから次へ進むように変更
+            // これで非同期タイミングのバグを完全に回避します
+            setTimeout(() => {
+                advanceToNextRound();
+            }, 300);
         }
         // 無料で実用的なランダム座標（陸地のみ）をMapillary API経由で取得する
         function findRandomMapillaryLocation(callback) {
