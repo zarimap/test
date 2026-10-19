@@ -15,7 +15,7 @@
             height: 100vh;
             overflow: hidden;
         }
-        /* 右側（あるいは左側指定：今回はご要望に合わせて右側に文字形式ログ・情報を配置） */
+        /* サイドパネル（右側：文字形式の表示） */
         #sidebar {
             width: 420px;
             background-color: #161925;
@@ -24,7 +24,7 @@
             flex-direction: column;
             box-shadow: -4px 0 15px rgba(0,0,0,0.5);
             z-index: 1000;
-            order: 2; /* 右側に配置 */
+            order: 2;
         }
         .header {
             padding: 15px;
@@ -69,11 +69,11 @@
             100% { opacity: 1; }
         }
 
-        /* 地図領域（左側へ配置） */
+        /* 地図領域（左側） */
         #map {
             flex: 1;
             height: 100%;
-            background-color: #0f111a;
+            background-color: #1a1a1a; /* タイル読み込み前の暗い背景 */
             order: 1;
         }
 
@@ -107,7 +107,7 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // --- 1. ダーク基調地図の初期化 ---
+        // --- 1. オープン仕様の地図初期化 (APIキー不要) ---
         const map = L.map('map', {
             center: [38.0, 137.0],
             zoom: 5,
@@ -116,47 +116,22 @@
 
         L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-        // Dark Matterタイル
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-            subdomains: 'abcd',
+        // APIキー不要・登録不要のオープンソース・ダーク調タイルマップ (Stamen/Carto代替のオープンタイル)
+        // またはOSM標準タイルにCSSフィルターでダークモードを適用して視認性を確保
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(map);
 
-        // --- 2. 強震モニタ画像を地図上にオーバーレイする設定 ---
-        // 日本周辺をカバーする緯度経度の境界 (Bounds: [南西端], [北東端])
-        const imageBounds = [[24.0, 122.0], [46.0, 148.0]];
-        let kyoshinOverlay = null;
+        // 地図全体をCSSでダーク調に反転・調整（APIキーなしで確実にダークテーマを維持するため）
+        const darkStyle = document.createElement('style');
+        darkStyle.innerHTML = `
+            .leaflet-tile-pane { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
+            .leaflet-container { background-color: #111 !important; }
+        `;
+        document.head.appendChild(darkStyle);
 
-        function updateKyoshinOverlay() {
-            // 防災科研の強震モニタ最新画像URL (CORSや仕様により直リンクの挙動が変わるためタイムスタンプでキャッシュ回避)
-            // ※環境によりプロキシが必要な場合があります
-            const nowTime = new Date();
-            // 簡易的に最近の時刻フォーマットを作成するロジック、またはダミー/公式最新エンドポイント
-            const yyyyMMdd = nowTime.toISOString().slice(0,10).replace(/-/g,"");
-            // 注意: 公式のリアルタイム画像仕様に合わせたパスを指定してください
-            const imageUrl = `http://www.kmoni.bosai.go.jp/data/map_img/RealTimeImg/acmap_s/${yyyyMMdd}/${yyyyMMdd}${formatTimeStr(nowTime)}.acmap_s.gif`;
-
-            if (kyoshinOverlay) {
-                map.removeLayer(kyoshinOverlay);
-            }
-            
-            // 画像を地図に被せる (opacityで背景地図と合成)
-            // ※もし直接ブラウザから読み込めない場合は、CORS回避用プロキシや静的プレースホルダーをご活用ください
-            // kyoshinOverlay = L.imageOverlay(imageUrl, imageBounds, { opacity: 0.5 }).addTo(map);
-        }
-
-        function formatTimeStr(date) {
-            const hh = String(date.getHours()).padStart(2, '0');
-            const mm = String(date.getMinutes()).padStart(2, '0');
-            const ss = String(date.getSeconds()).padStart(2, '0');
-            return `${hh}${mm}${ss}`;
-        }
-
-        // 10秒ごとに強震モニタ画像を更新
-        // setInterval(updateKyoshinOverlay, 10000);
-
-        // --- 3. 状態管理・レイヤー変数 ---
+        // --- 2. 状態管理・レイヤー変数 ---
         let hypoMarker = null;
         let pWaveCircle = null;
         let sWaveCircle = null;
@@ -171,7 +146,7 @@
         const alertBox = document.getElementById("alertBox");
         const alertDetails = document.getElementById("alertDetails");
 
-        // --- 4. Wolfx WebSocket 常時接続処理 ---
+        // --- 3. Wolfx WebSocket 常時接続処理 ---
         const wsUrl = "wss://ws-api.wolfx.jp/jma_eew";
         let ws;
 
@@ -219,7 +194,7 @@
             logBox.scrollTop = logBox.scrollHeight;
         }
 
-        // --- 5. EEW電文の解析と文字・地図への反映 ---
+        // --- 4. EEW電文の解析と文字・地図への反映 ---
         function parseEEW(data) {
             const reportNum = data.ReportNum || "?";
             const hypo = data.HypoCenter || "不明";
@@ -259,7 +234,7 @@
             updateMapElements(lat, lon, hypo, mag, maxInt);
         }
 
-        // --- 6. 地図上の描画更新 (震源・P/S波) ---
+        // --- 5. 地図上の描画更新 (震源・P/S波) ---
         function updateMapElements(lat, lon, hypo, mag, maxInt) {
             if (hypoMarker) map.removeLayer(hypoMarker);
             if (pWaveCircle) map.removeLayer(pWaveCircle);
@@ -296,7 +271,7 @@
             }).addTo(map);
         }
 
-        // --- 7. P波・S波のリアルタイム拡大アニメーション ---
+        // --- 6. P波・S波のリアルタイム拡大アニメーション ---
         setInterval(() => {
             if (!currentHypo || !earthquakeStartTime) return;
 
@@ -305,7 +280,7 @@
             const sRadius = S_SPEED * elapsedSeconds * 1000;
 
             if (pWaveCircle) pWaveCircle.setRadius(pRadius);
-            if (sWaveCircle) sWaveCircle.setRadius(sWaveCircle);
+            if (sWaveCircle) sWaveCircle.setRadius(sRadius);
         }, 100);
 
         function resetAllLayers() {
