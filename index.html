@@ -73,7 +73,7 @@
         #map {
             flex: 1;
             height: 100%;
-            background-color: #1a1a1a; /* タイル読み込み前の暗い背景 */
+            background-color: #1a1a1a;
             order: 1;
         }
 
@@ -116,14 +116,12 @@
 
         L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-        // APIキー不要・登録不要のオープンソース・ダーク調タイルマップ (Stamen/Carto代替のオープンタイル)
-        // またはOSM標準タイルにCSSフィルターでダークモードを適用して視認性を確保
+        // OSM標準タイルにダークフィルター適用
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(map);
 
-        // 地図全体をCSSでダーク調に反転・調整（APIキーなしで確実にダークテーマを維持するため）
         const darkStyle = document.createElement('style');
         darkStyle.innerHTML = `
             .leaflet-tile-pane { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
@@ -131,7 +129,49 @@
         `;
         document.head.appendChild(darkStyle);
 
-        // --- 2. 状態管理・レイヤー変数 ---
+        // --- 2. 強震モニタ画像の重畳（オーバーレイ）設定 ---
+        // 日本全域をカバーする緯度経度の境界バウンディングボックス [南西端(緯度,経度), 北東端(緯度,経度)]
+        // ※強震モニタの画像が綺麗に日本列島に重なるように位置を微調整しています
+        const imageBounds = [[20.25, 122.9], [48.5, 150.0]];
+        let kyoshinOverlay = null;
+
+        function updateKyoshinImage() {
+            // 強震モニタの更新遅延（約15〜20秒前）を考慮した日時を生成
+            const targetTime = new Date(Date.now() - 18000); 
+
+            const yyyy = targetTime.getFullYear();
+            const MM = String(targetTime.getMonth() + 1).padStart(2, '0');
+            const dd = String(targetTime.getDate()).padStart(2, '0');
+            const hh = String(targetTime.getHours()).padStart(2, '0');
+            const mm = String(targetTime.getMinutes()).padStart(2, '0');
+            // 秒は2秒刻み等で生成されるため、端数を丸める（例: 2秒おき）
+            let ss = targetTime.getSeconds();
+            ss = Math.floor(ss / 2) * 2;
+            const ssStr = String(ss).padStart(2, '0');
+
+            const dateStr = `${yyyy}${MM}${dd}`;
+            const timeStr = `${yyyy}${MM}${dd}${hh}${mm}${ssStr}`;
+
+            // ご提示いただいた強震モニタの正確なエンドポイント構造
+            const imageUrl = `https://www.lmoni.bosai.go.jp/img_svr/data/map_img/RealTimeImg/acmap_s/${dateStr}/${timeStr}.acmap_s.gif`;
+
+            if (kyoshinOverlay) {
+                map.removeLayer(kyoshinOverlay);
+            }
+
+            // 画像を地図上にオーバーレイ (opacity: 0.65 で背景地図とうまく合成)
+            kyoshinOverlay = L.imageOverlay(imageUrl, imageBounds, {
+                opacity: 0.65,
+                interactive: false,
+                crossOrigin: true
+            }).addTo(map);
+        }
+
+        // 初回実行および5秒おきに最新の強震モニタ画像へ更新
+        updateKyoshinImage();
+        setInterval(updateKyoshinImage, 5000);
+
+        // --- 3. 状態管理・レイヤー変数 ---
         let hypoMarker = null;
         let pWaveCircle = null;
         let sWaveCircle = null;
@@ -146,7 +186,7 @@
         const alertBox = document.getElementById("alertBox");
         const alertDetails = document.getElementById("alertDetails");
 
-        // --- 3. Wolfx WebSocket 常時接続処理 ---
+        // --- 4. Wolfx WebSocket 常時接続処理 ---
         const wsUrl = "wss://ws-api.wolfx.jp/jma_eew";
         let ws;
 
@@ -194,7 +234,7 @@
             logBox.scrollTop = logBox.scrollHeight;
         }
 
-        // --- 4. EEW電文の解析と文字・地図への反映 ---
+        // --- 5. EEW電文の解析と文字・地図への反映 ---
         function parseEEW(data) {
             const reportNum = data.ReportNum || "?";
             const hypo = data.HypoCenter || "不明";
@@ -234,7 +274,7 @@
             updateMapElements(lat, lon, hypo, mag, maxInt);
         }
 
-        // --- 5. 地図上の描画更新 (震源・P/S波) ---
+        // --- 6. 地図上の描画更新 (震源・P/S波) ---
         function updateMapElements(lat, lon, hypo, mag, maxInt) {
             if (hypoMarker) map.removeLayer(hypoMarker);
             if (pWaveCircle) map.removeLayer(pWaveCircle);
@@ -271,7 +311,7 @@
             }).addTo(map);
         }
 
-        // --- 6. P波・S波のリアルタイム拡大アニメーション ---
+        // --- 7. P波・S波のリアルタイム拡大アニメーション ---
         setInterval(() => {
             if (!currentHypo || !earthquakeStartTime) return;
 
