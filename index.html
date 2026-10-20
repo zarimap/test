@@ -43,7 +43,7 @@
         .connected { background-color: #2b8a3e; color: #fff; }
         .disconnected { background-color: #c92a2a; color: #fff; }
 
-        /* ログコンテナ（強震モニタの上、スクロール可能） */
+        /* ログコンテナ（スクロール可能） */
         .log-wrapper {
             padding: 10px 15px 0 15px;
             font-size: 0.85rem;
@@ -52,10 +52,10 @@
             flex-shrink: 0;
         }
         .log-container {
-            height: 180px; /* ログの表示領域の高さ */
+            height: 200px;
             margin: 5px 15px 10px 15px;
             padding: 10px;
-            overflow-y: auto; /* スクロール可能 */
+            overflow-y: auto;
             font-family: monospace;
             font-size: 0.85rem;
             background-color: #0b0d14;
@@ -66,31 +66,43 @@
             flex-shrink: 0;
         }
         
-        /* 右下の縦長強震モニタ埋め込みエリア */
+        /* 右下の強震モニタ埋め込みエリア（枠自体を縮小） */
         .kmoni-section {
             background-color: #11141d;
             border-top: 1px solid #2a2f45;
-            padding: 12px 15px;
+            padding: 10px 15px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            flex: 1; /* 残りの高さをすべて占有 */
+            flex: 1;
         }
         .kmoni-title {
             width: 100%;
             font-size: 0.75rem;
             color: #8b9bb4;
             font-weight: bold;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             flex-shrink: 0;
         }
-        .kmoni-frame {
+        
+        /* iframeを内包するコンテナ（縮小表示の基準） */
+        .kmoni-frame-wrapper {
             width: 100%;
-            flex: 1; /* 縦長に引き伸ばす */
-            min-height: 320px; /* 縦長の最小高さ */
-            border: none;
+            height: 220px; /* 枠の高さ自体をコンパクトに縮小 */
+            overflow: hidden;
+            position: relative;
             border-radius: 4px;
             background-color: #000;
+        }
+        .kmoni-frame {
+            width: 1200px;  /* 元ページの想定横幅 */
+            height: 900px; /* 元ページの想定縦幅 */
+            border: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform: scale(0.32); /* 全体が収まるように縮小 */
+            transform-origin: top left;
         }
 
         /* 警報アラートボックス */
@@ -110,7 +122,7 @@
             100% { opacity: 1; }
         }
 
-        /* 地図領域（左側：サイズ変更なし） */
+        /* 地図領域（左側） */
         #map {
             flex: 1;
             height: 100%;
@@ -141,14 +153,16 @@
             <p id="alertDetails" style="margin: 5px 0 0 0; font-size: 0.9rem;"></p>
         </div>
 
-        <!-- ログセクション（強震モニタの上・スクロール可能） -->
+        <!-- ログセクション（スクロール可能） -->
         <div class="log-wrapper">受信ログ & 地域別予想震度</div>
         <div id="logBox" class="log-container">システム初期化中...</div>
 
-        <!-- 右下：縦長強震モニタiframeセクション -->
+        <!-- 右下：縮小された強震モニタセクション -->
         <div class="kmoni-section">
             <div class="kmoni-title">📈 リアルタイム強震モニタ (eqdata)</div>
-            <iframe src="https://eqdata.sakura.ne.jp/kyoshin/2sec_i.html" class="kmoni-frame"></iframe>
+            <div class="kmoni-frame-wrapper">
+                <iframe src="https://eqdata.sakura.ne.jp/kyoshin/2sec_i.html" class="kmoni-frame"></iframe>
+            </div>
         </div>
     </div>
 
