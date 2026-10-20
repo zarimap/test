@@ -112,9 +112,41 @@
 
     <!-- 左側コンテナ（強震モニタiframe ＋ Leafletマップを重ねる） -->
     <div id="map-container">
-        <!-- 強震モニタの公式iframe（2秒の遅延を想定してローディング後に表示、またはそのまま配置） -->
-        <iframe id="kmoni-frame" src="https://www.lmoni.bosai.go.jp/monitor/"></iframe>
-        
+        <script>
+            // 日時を指定（例：2026年10月20日 10時12分35秒）
+const targetDate = new Date('2026-10-20T10:12:35'); 
+// 現在時刻を使いたい場合は const targetDate = new Date(); に書き換えてください
+
+// 各種数値を2桁の文字列にパディングする関数
+const pad = (n) => String(n).padStart(2, '0');
+
+const year = targetDate.getFullYear();
+const month = pad(targetDate.getMonth() + 1);
+const day = pad(targetDate.getDate());
+const hours = pad(targetDate.getHours());
+const minutes = pad(targetDate.getMinutes());
+const seconds = pad(targetDate.getSeconds());
+
+// URLのディレクトリ部分 (YYYYMMDD)
+const dateDir = `${year}${month}${day}`;
+
+// ファイル名の日時部分 (YYYYMMDDHHMMSS)
+const filenameTime = `${dateDir}${hours}${minutes}${seconds}`;
+
+// 最終的なURLの構築
+const imageUrl = `https://www.k01s.bosai.go.jp/data/map_img/RealTimeImg/jma_s/${dateDir}/${filenameTime}.jma_s.gif`;
+// iframeエンドポイントのURL
+const iframeEndpoint = 'https://example.com';
+
+// iframe要素を動的に作成
+const iframe = document.createElement('iframe');
+iframe.src = iframeEndpoint;
+iframe.width = '100%';
+iframe.height = '500px';
+
+// 画面の特定の要素（例: #container）に追加する
+document.getElementById('map-container').appendChild(iframe);
+
         <!-- 下に敷く地図レイヤー -->
         <div id="map"></div>
     </div>
