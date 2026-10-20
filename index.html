@@ -52,7 +52,7 @@
             flex-shrink: 0;
         }
         .log-container {
-            height: 120px;
+            height: 140px;
             margin: 5px 15px 10px 15px;
             padding: 10px;
             overflow-y: auto;
@@ -66,7 +66,7 @@
             flex-shrink: 0;
         }
         
-        /* 右下の強震モニタ埋め込みエリア（さらに1.2倍拡大） */
+        /* 右下の強震モニタ埋め込みエリア */
         .kmoni-section {
             background-color: #11141d;
             border-top: 1px solid #2a2f45;
@@ -85,7 +85,6 @@
             flex-shrink: 0;
         }
         
-        /* iframeを内包するコンテナ（高さも1.2倍に拡張） */
         .kmoni-frame-wrapper {
             width: 100%;
             height: 528px; 
@@ -101,7 +100,7 @@
             position: absolute;
             top: 0;
             left: 0;
-            transform: scale(0.768); /* 0.64 × 1.2 = 0.768 */
+            transform: scale(0.768);
             transform-origin: top left;
         }
 
@@ -155,9 +154,9 @@
 
         <!-- ログセクション（スクロール可能） -->
         <div class="log-wrapper">受信ログ & 地域別予想震度</div>
-        <div id="logBox" class="log-container">システム初期化中...</div>
+        <div id="logBox" class="log-container">システム初期化中... WebSocket接続を待機しています。</div>
 
-        <!-- 右下：さらに1.2倍拡大された強震モニタセクション -->
+        <!-- 右下：強震モニタセクション -->
         <div class="kmoni-section">
             <div class="kmoni-title">📈 リアルタイム強震モニタ (eqdata)</div>
             <div class="kmoni-frame-wrapper">
@@ -191,15 +190,17 @@
         `;
         document.head.appendChild(darkStyle);
 
-        // --- 2. 状態管理・レイヤー変数 ---
+        // --- 2. 状態管理・レイヤー・算出用変数 ---
         let hypoMarker = null;
         let pWaveCircle = null;
         let sWaveCircle = null;
         let currentHypo = null;
         
-        const P_SPEED = 6.5; // km/s
-        const S_SPEED = 3.5; // km/s
-        let earthquakeStartTime = null;
+        let P_SPEED = 6.5; 
+        let S_SPEED = 3.5; 
+        let earthquakeStartTime = null; // 正確な地震発生時刻（ms）
+
+        let reportHistory = [];
 
         const wsStatus = document.getElementById("wsStatus");
         const logBox = document.getElementById("logBox");
@@ -254,20 +255,68 @@
             logBox.scrollTop = logBox.scrollHeight;
         }
 
-        // --- 4. EEW電文の解析と文字・地図への反映 ---
+        // --- 4. 2地点間（複数報）による見かけの速度算出関数 ---
+        function calculateDynamicVelocity(newReport, lat, lon) {
+            const now = Date.now();
+            const currentReportData = {
+                lat: lat,
+                lon: lon,
+                time: now,
+                reportNum: parseInt(newReport.ReportNum || 1)
+            };
+
+            if (reportHistory.length > 0) {
+                const prev = reportHistory[reportHistory.length - 1];
+                const distanceKm = getDistanceFromLatLonInKm(prev.lat, prev.lon, lat, lon);
+                const timeDiffSec = (now - prev.time) / 1000;
+
+                if (timeDiffSec > 0 && distanceKm > 0) {
+                    const calculatedSpeed = distanceKm / timeDiffSec;
+                    if (calculatedSpeed >= 2.0 && calculatedSpeed <= 10.0) {
+                        P_SPEED = calculatedSpeed;
+                        S_SPEED = calculatedSpeed * 0.55; 
+                        appendLog(`[速度算出] 2報間の差分から速度を動的補正: P波=${P_SPEED.toFixed(2)}km/s`);
+                    }
+                }
+            }
+
+            reportHistory.push(currentReportData);
+            if (reportHistory.length > 5) reportHistory.shift();
+        }
+
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function deg2rad(deg) {
+            return deg * (Math.PI/180);
+        }
+
+        // --- 5. EEW電文の解析と文字・地図への反映 ---
         function parseEEW(data) {
             const reportNum = data.ReportNum || "?";
-            const hypo = data.HypoCenter || "不明";
+            const hypo = data.Hypocenter || "不明"; // 正しいプロパティ名 Hypocenter
             const mag = data.Magnitude || 0.0;
             const maxInt = data.MaxIntensity || "不明";
+            const depth = data.Depth || "不明"; 
             const lat = data.Latitude;
             const lon = data.Longitude;
+            const originTimeString = data.OriginTime; // "YYYY/MM/DD HH:mm:ss"
             const isFinal = data.isFinal ? "【最終報】" : "";
             const warnAreas = data.WarnArea || [];
 
             let logText = `[第${reportNum}報] ${isFinal}\n`;
-            logText += ` ┣ 震源地: ${hypo} (M${mag})\n`;
-            logText += ` ┣ 予想最大震度: ${maxInt}\n`;
+            logText += ` ┣ 震源地: ${hypo} (深さ: ${depth})\n`;
+            logText += ` ┣ 発生時刻: ${originTimeString}\n`;
+            logText += ` ┣ 規模: M${mag} / 最大予想震度: ${maxInt}\n`;
             logText += ` ┗ 警戒地域・予想震度:\n`;
 
             warnAreas.forEach(area => {
@@ -284,34 +333,46 @@
                 return;
             }
 
-            // アラート表示の更新
+            // OriginTime（地震発生時刻文字列）をミリ秒タイムスタンプに変換して初期化
+            if (originTimeString) {
+                // "YYYY/MM/DD HH:mm:ss" を JSで解釈可能な "YYYY-MM-DDTHH:mm:ss" に置換してパース
+                const parsedTime = new Date(originTimeString.replace(/\//g, '-')).getTime();
+                if (!isNaN(parsedTime)) {
+                    earthquakeStartTime = parsedTime;
+                }
+            }
+            
+            // 万が一 OriginTime が取得できない場合のフォールバック
+            if (!earthquakeStartTime) {
+                earthquakeStartTime = Date.now();
+            }
+
+            calculateDynamicVelocity(data, lat, lon);
+
             alertBox.classList.add("active");
-            alertDetails.innerHTML = `震源: ${hypo}<br>規模: M${mag} / 最大予想震度: ${maxInt}`;
+            alertDetails.innerHTML = `震源: ${hypo} (深さ: ${depth})<br>規模: M${mag} / 最大予想震度: ${maxInt}`;
 
             currentHypo = { lat: lat, lon: lon };
-            earthquakeStartTime = Date.now();
 
-            updateMapElements(lat, lon, hypo, mag, maxInt);
+            updateMapElements(lat, lon, hypo, mag, maxInt, depth);
         }
 
-        // --- 5. 地図上の描画更新 (震源・P/S波) ---
-        function updateMapElements(lat, lon, hypo, mag, maxInt) {
+        // --- 6. 地図上の描画更新 (震源・P/S波) ---
+        function updateMapElements(lat, lon, hypo, mag, maxInt, depth) {
             if (hypoMarker) map.removeLayer(hypoMarker);
             if (pWaveCircle) map.removeLayer(pWaveCircle);
             if (sWaveCircle) map.removeLayer(sWaveCircle);
 
-            // 震源地マーカー
             hypoMarker = L.circleMarker([lat, lon], {
                 radius: 8,
                 color: '#fff',
                 weight: 2,
                 fillColor: '#ff4d4f',
                 fillOpacity: 1
-            }).addTo(map).bindPopup(`<b>震源: ${hypo}</b><br>M${mag} / 震度${maxInt}`);
+            }).addTo(map).bindPopup(`<b>震源: ${hypo}</b><br>深さ: ${depth} / M${mag} / 震度${maxInt}`);
 
             map.setView([lat, lon], 7);
 
-            // P波サークル (水色)
             pWaveCircle = L.circle([lat, lon], {
                 radius: 0,
                 color: '#3bc9db',
@@ -321,7 +382,6 @@
                 dashArray: '4, 4'
             }).addTo(map);
 
-            // S波サークル (赤)
             sWaveCircle = L.circle([lat, lon], {
                 radius: 0,
                 color: '#ff6b6b',
@@ -331,11 +391,14 @@
             }).addTo(map);
         }
 
-        // --- 6. P波・S波のリアルタイム拡大アニメーション ---
+        // --- 7. P波・S波のリアルタイム拡大アニメーション（OriginTime起点） ---
         setInterval(() => {
             if (!currentHypo || !earthquakeStartTime) return;
 
+            // 地震発生時刻からの正確な経過秒数を計算
             const elapsedSeconds = (Date.now() - earthquakeStartTime) / 1000;
+            if (elapsedSeconds < 0) return; // 未来時刻への配慮
+
             const pRadius = P_SPEED * elapsedSeconds * 1000;
             const sRadius = S_SPEED * elapsedSeconds * 1000;
 
@@ -349,6 +412,8 @@
             if (sWaveCircle) map.removeLayer(sWaveCircle);
             alertBox.classList.remove("active");
             currentHypo = null;
+            earthquakeStartTime = null;
+            reportHistory = [];
         }
 
         // アプリ起動時に接続開始
