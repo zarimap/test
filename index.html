@@ -88,20 +88,6 @@
             z-index: 1;
         }
 
-        /* 上面に重ねる強震モニタiframe（ポータビリティ確保のためクリックを透過） */
-        #kmoni-frame {
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 2;
-            border: none;
-            opacity: 0.7; /* 背景地図とうまく馴染むように調整 */
-            pointer-events: none; /* 下層のLeafletマップと干渉させないため */
-            filter: brightness(0.9) contrast(1.2);
-        }
-
         .leaflet-popup-content-wrapper, .leaflet-popup-tip {
             background-color: #1f2438 !important;
             color: #fff !important;
@@ -110,44 +96,8 @@
 </head>
 <body>
 
-    <!-- 左側コンテナ（強震モニタiframe ＋ Leafletマップを重ねる） -->
+    <!-- 左側コンテナ（Leafletマップを敷く） -->
     <div id="map-container">
-        <script>
-            // 日時を指定（例：2026年10月20日 10時12分35秒）
-const targetDate = new Date('2026-10-20T10:12:35'); 
-// 現在時刻を使いたい場合は const targetDate = new Date(); に書き換えてください
-
-// 各種数値を2桁の文字列にパディングする関数
-const pad = (n) => String(n).padStart(2, '0');
-
-const year = targetDate.getFullYear();
-const month = pad(targetDate.getMonth() + 1);
-const day = pad(targetDate.getDate());
-const hours = pad(targetDate.getHours());
-const minutes = pad(targetDate.getMinutes());
-const seconds = pad(targetDate.getSeconds());
-
-// URLのディレクトリ部分 (YYYYMMDD)
-const dateDir = `${year}${month}${day}`;
-
-// ファイル名の日時部分 (YYYYMMDDHHMMSS)
-const filenameTime = `${dateDir}${hours}${minutes}${seconds}`;
-
-// 最終的なURLの構築
-const imageUrl = `https://www.k01s.bosai.go.jp/data/map_img/RealTimeImg/jma_s/${dateDir}/${filenameTime}.jma_s.gif`;
-// iframeエンドポイントのURL
-const iframeEndpoint = 'https://example.com';
-
-// iframe要素を動的に作成
-const iframe = document.createElement('iframe');
-iframe.src = iframeEndpoint;
-iframe.width = '100%';
-iframe.height = '500px';
-
-// 画面の特定の要素（例: #container）に追加する
-document.getElementById('map-container').appendChild(iframe);
-
-        <!-- 下に敷く地図レイヤー -->
         <div id="map"></div>
     </div>
 
@@ -192,7 +142,49 @@ document.getElementById('map-container').appendChild(iframe);
         `;
         document.head.appendChild(darkStyle);
 
-        // --- 2. 状態管理・レイヤー変数 ---
+        // --- 2. 強震モニタ画像オーバーレイの設定 (ご指定のエンドポイント形式) ---
+        // 日本全域をカバーする緯度経度境界
+        const imageBounds = [[24.0, 122.0], [46.0, 148.0]];
+        let kyoshinOverlay = null;
+
+        function updateKyoshinImage() {
+            // 2秒の遅延（タイムラグ）を考慮した日時を生成
+            const targetTime = new Date(Date.now() - 2000); 
+
+            const yyyy = targetTime.getFullYear();
+            const MM = String(targetTime.getMonth() + 1).padStart(2, '0');
+            const dd = String(targetTime.getDate()).padStart(2, '0');
+            const hh = String(targetTime.getHours()).padStart(2, '0');
+            const mm = String(targetTime.getMinutes()).padStart(2, '0');
+            
+            // 強震モニタの更新間隔に合わせて秒を2秒刻みに丸める
+            let ss = targetTime.getSeconds();
+            ss = Math.floor(ss / 2) * 2;
+            const ssStr = String(ss).padStart(2, '0');
+
+            const dateStr = `${yyyy}${MM}${dd}`;
+            const timeStr = `${yyyy}${MM}${dd}${hh}${mm}${ssStr}`;
+
+            // 指定されたエンドポイント構造
+            const imageUrl = `https://www.k01s.bosai.go.jp/data/map_img/RealTimeImg/jma_s/${dateStr}/${timeStr}.jma_s.gif`;
+
+            if (kyoshinOverlay) {
+                map.removeLayer(kyoshinOverlay);
+            }
+
+            // Leafletの画像オーバーレイとして地図上に重ねる（背景地図と完全に同期・連動します）
+            kyoshinOverlay = L.imageOverlay(imageUrl, imageBounds, {
+                opacity: 0.7,
+                interactive: false,
+                crossOrigin: true
+            }).addTo(map);
+        }
+
+        // 初回実行および2秒おきに最新画像へ更新
+        updateKyoshinImage();
+        setInterval(updateKyoshinImage, 2000);
+
+        // --- 3. 状態管理・レイヤー変数 ---
         let hypoMarker = null;
         let pWaveCircle = null;
         let sWaveCircle = null;
@@ -207,7 +199,7 @@ document.getElementById('map-container').appendChild(iframe);
         const alertBox = document.getElementById("alertBox");
         const alertDetails = document.getElementById("alertDetails");
 
-        // --- 3. Wolfx WebSocket 常時接続処理 ---
+        // --- 4. Wolfx WebSocket 常時接続処理 ---
         const wsUrl = "wss://ws-api.wolfx.jp/jma_eew";
         let ws;
 
@@ -255,7 +247,7 @@ document.getElementById('map-container').appendChild(iframe);
             logBox.scrollTop = logBox.scrollHeight;
         }
 
-        // --- 4. EEW電文の解析と文字・地図への反映 ---
+        // --- 5. EEW電文の解析と文字・地図への反映 ---
         function parseEEW(data) {
             const reportNum = data.ReportNum || "?";
             const hypo = data.HypoCenter || "不明";
@@ -290,14 +282,11 @@ document.getElementById('map-container').appendChild(iframe);
             alertDetails.innerHTML = `震源: ${hypo}<br>規模: M${mag} / 最大予想震度: ${maxInt}`;
 
             currentHypo = { lat: lat, lon: lon };
-            // ご指定の2秒待ちを考慮した初期化タイミングの調整
-            setTimeout(() => {
-                earthquakeStartTime = Date.now();
-                updateMapElements(lat, lon, hypo, mag, maxInt);
-            }, 2000);
+            earthquakeStartTime = Date.now();
+            updateMapElements(lat, lon, hypo, mag, maxInt);
         }
 
-        // --- 5. 地図上の描画更新 (震源・P/S波) ---
+        // --- 6. 地図上の描画更新 (震源・P/S波) ---
         function updateMapElements(lat, lon, hypo, mag, maxInt) {
             if (hypoMarker) map.removeLayer(hypoMarker);
             if (pWaveCircle) map.removeLayer(pWaveCircle);
@@ -334,7 +323,7 @@ document.getElementById('map-container').appendChild(iframe);
             }).addTo(map);
         }
 
-        // --- 6. P波・S波のリアルタイム拡大アニメーション ---
+        // --- 7. P波・S波のリアルタイム拡大アニメーション ---
         setInterval(() => {
             if (!currentHypo || !earthquakeStartTime) return;
 
