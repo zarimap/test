@@ -15,7 +15,7 @@
             height: 100vh;
             overflow: hidden;
         }
-        /* サイドパネル（右側：文字形式の表示 ＋ 強震モニタ） */
+        /* サイドパネル（右側：上部に強震モニタ、下部にログ） */
         #sidebar {
             width: 420px;
             background-color: #161925;
@@ -51,13 +51,13 @@
             background-color: #0b0d14;
             color: #51cf66;
             white-space: pre-wrap;
-            min-height: 120px;
+            min-height: 100px;
         }
         
-        /* 右下の強震モニタ埋め込みエリア */
+        /* 強震モニタ埋め込みエリア（上部に移動） */
         .kmoni-section {
             background-color: #11141d;
-            border-top: 1px solid #2a2f45;
+            border-bottom: 1px solid #2a2f45;
             padding: 10px;
             display: flex;
             flex-direction: column;
@@ -114,7 +114,7 @@
     <!-- 地図コンテナ（左側） -->
     <div id="map"></div>
 
-    <!-- サイドパネル（右側：ログ ＋ 右下に強震モニタ） -->
+    <!-- サイドパネル（右側） -->
     <div id="sidebar">
         <div class="header">
             <h1>🌐 Wolfx EEW リアルタイム監視</h1>
@@ -126,14 +126,14 @@
             <p id="alertDetails" style="margin: 5px 0 0 0; font-size: 0.9rem;"></p>
         </div>
 
-        <div style="padding: 10px 15px 0 15px; font-size: 0.85rem; color: #8b9bb4; font-weight: bold;">受信ログ & 地域別予想震度</div>
-        <div id="logBox" class="log-container">システム初期化中...</div>
-
-        <!-- 右下：強震モニタiframeセクション -->
+        <!-- 強震モニタiframeセクション（上部に配置） -->
         <div class="kmoni-section">
             <div class="kmoni-title">📈 リアルタイム強震モニタ (eqdata)</div>
             <iframe src="https://eqdata.sakura.ne.jp/kyoshin/2sec_i.html" class="kmoni-frame"></iframe>
         </div>
+
+        <div style="padding: 10px 15px 0 15px; font-size: 0.85rem; color: #8b9bb4; font-weight: bold;">受信ログ & 地域別予想震度</div>
+        <div id="logBox" class="log-container">システム初期化中...</div>
     </div>
 
     <!-- Leaflet JS -->
