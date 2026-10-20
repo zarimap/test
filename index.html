@@ -15,7 +15,7 @@
             height: 100vh;
             overflow: hidden;
         }
-        /* サイドパネル（右側：文字形式の表示） */
+        /* サイドパネル（右側：文字形式の表示 ＋ 強震モニタ） */
         #sidebar {
             width: 420px;
             background-color: #161925;
@@ -51,8 +51,34 @@
             background-color: #0b0d14;
             color: #51cf66;
             white-space: pre-wrap;
+            min-height: 120px;
         }
         
+        /* 右下の強震モニタ埋め込みエリア */
+        .kmoni-section {
+            background-color: #11141d;
+            border-top: 1px solid #2a2f45;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .kmoni-title {
+            width: 100%;
+            font-size: 0.75rem;
+            color: #8b9bb4;
+            font-weight: bold;
+            margin-bottom: 6px;
+            padding-left: 5px;
+        }
+        .kmoni-frame {
+            width: 100%;
+            height: 240px;
+            border: none;
+            border-radius: 4px;
+            background-color: #000;
+        }
+
         /* 警報アラートボックス */
         .eew-alert {
             margin: 15px;
@@ -69,7 +95,7 @@
             100% { opacity: 1; }
         }
 
-        /* 地図領域（左側） */
+        /* 地図領域（左側：サイズ変更なし） */
         #map {
             flex: 1;
             height: 100%;
@@ -88,7 +114,7 @@
     <!-- 地図コンテナ（左側） -->
     <div id="map"></div>
 
-    <!-- サイドパネル（右側：文字形式の表示） -->
+    <!-- サイドパネル（右側：ログ ＋ 右下に強震モニタ） -->
     <div id="sidebar">
         <div class="header">
             <h1>🌐 Wolfx EEW リアルタイム監視</h1>
@@ -102,114 +128,40 @@
 
         <div style="padding: 10px 15px 0 15px; font-size: 0.85rem; color: #8b9bb4; font-weight: bold;">受信ログ & 地域別予想震度</div>
         <div id="logBox" class="log-container">システム初期化中...</div>
+
+        <!-- 右下：強震モニタiframeセクション -->
+        <div class="kmoni-section">
+            <div class="kmoni-title">📈 リアルタイム強震モニタ (eqdata)</div>
+            <iframe src="https://eqdata.sakura.ne.jp/kyoshin/2sec_i.html" class="kmoni-frame"></iframe>
+        </div>
     </div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // --- 1. オープン仕様の地図初期化 (APIキー不要) ---
+        // --- 1. 地図初期化 (APIキー不要・ダークモード対応) ---
         const map = L.map('map', {
             center: [38.0, 137.0],
             zoom: 5,
-            zoomControl: false,
-            attributionControl: false
+            zoomControl: false
         });
 
         L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
         // OSM標準タイルにダークフィルター適用
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(map);
 
         const darkStyle = document.createElement('style');
         darkStyle.innerHTML = `
-            .leaflet-tile-pane { filter: brightness(0.5) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
+            .leaflet-tile-pane { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
             .leaflet-container { background-color: #111 !important; }
         `;
         document.head.appendChild(darkStyle);
 
-        // --- 2. 地図の動作と完全に同期する iframe レイヤーの定義 ---
-        const IframeLayer = L.Layer.extend({
-            initialize: function(bounds, options) {
-                this._bounds = L.latLngBounds(bounds);
-                L.setOptions(this, options);
-            },
-
-            onAdd: function(map) {
-                this._map = map;
-                
-                // iframe要素の作成
-                this._iframe = L.DomUtil.create('iframe', 'leaflet-kmoni-iframe');
-                this._iframe.style.position = 'absolute';
-                this._iframe.style.border = 'none';
-                this._iframe.style.pointerEvents = 'none'; // マウス操作を下の地図に透過
-                this._iframe.style.opacity = '0.7';
-                this._iframe.style.zIndex = '400';
-
-                // 初回URL設定
-                this._updateIframeUrl();
-
-                map.getPanes().overlayPane.appendChild(this._iframe);
-
-                // 地図の移動・ズームに同期させるイベントリスナー
-                map.on('viewreset moveend zoomend', this._updatePosition, this);
-                this._updatePosition();
-
-                // 2秒ごとに最新のGIF URLへ更新
-                this._timer = setInterval(() => {
-                    this._updateIframeUrl();
-                }, 2000);
-            },
-
-            onRemove: function(map) {
-                clearInterval(this._timer);
-                map.getPanes().overlayPane.removeChild(this._iframe);
-                map.off('viewreset moveend zoomend', this._updatePosition, this);
-            },
-
-            _getGifUrl: function() {
-                // 2秒の遅延を考慮した日時生成
-                const targetTime = new Date(Date.now() - 2000);
-                const yyyy = targetTime.getFullYear();
-                const MM = String(targetTime.getMonth() + 1).padStart(2, '0');
-                const dd = String(targetTime.getDate()).padStart(2, '0');
-                const hh = String(targetTime.getHours()).padStart(2, '0');
-                const mm = String(targetTime.getMinutes()).padStart(2, '0');
-                let ss = targetTime.getSeconds();
-                ss = Math.floor(ss / 2) * 2;
-                const ssStr = String(ss).padStart(2, '0');
-
-                const dateStr = `${yyyy}${MM}${dd}`;
-                const timeStr = `${yyyy}${MM}${dd}${hh}${mm}${ssStr}`;
-
-                return `https://www.k01s.bosai.go.jp/data/map_img/RealTimeImg/jma_s/${dateStr}/${timeStr}.jma_s.gif`;
-            },
-
-            _updateIframeUrl: function() {
-                const url = this._getGifUrl();
-                // すでに同じURLでなければ更新
-                if (this._iframe.src !== url) {
-                    this._iframe.src = url;
-                }
-            },
-
-            _updatePosition: function() {
-                // 地図上のピクセル座標に変換してiframeの位置とサイズを同期
-                const p1 = this._map.latLngToLayerPoint(this._bounds.getNorthWest());
-                const p2 = this._map.latLngToLayerPoint(this._bounds.getSouthEast());
-
-                L.DomUtil.setPosition(this._iframe, p1);
-                this._iframe.style.width = (p2.x - p1.x) + 'px';
-                this._iframe.style.height = (p2.y - p1.y) + 'px';
-            }
-        });
-
-        // 日本全域をカバーする範囲にiframeレイヤーを配置して地図に追加
-        const kmoniBounds = [[24.0, 122.0], [46.0, 148.0]];
-        const kmoniLayer = new IframeLayer(kmoniBounds).addTo(map);
-
-        // --- 3. 状態管理・レイヤー変数 ---
+        // --- 2. 状態管理・レイヤー変数 ---
         let hypoMarker = null;
         let pWaveCircle = null;
         let sWaveCircle = null;
@@ -224,7 +176,7 @@
         const alertBox = document.getElementById("alertBox");
         const alertDetails = document.getElementById("alertDetails");
 
-        // --- 4. Wolfx WebSocket 常時接続処理 ---
+        // --- 3. Wolfx WebSocket 常時接続処理 ---
         const wsUrl = "wss://ws-api.wolfx.jp/jma_eew";
         let ws;
 
@@ -272,7 +224,7 @@
             logBox.scrollTop = logBox.scrollHeight;
         }
 
-        // --- 5. EEW電文の解析と文字・地図への反映 ---
+        // --- 4. EEW電文の解析と文字・地図への反映 ---
         function parseEEW(data) {
             const reportNum = data.ReportNum || "?";
             const hypo = data.HypoCenter || "不明";
@@ -308,10 +260,11 @@
 
             currentHypo = { lat: lat, lon: lon };
             earthquakeStartTime = Date.now();
+
             updateMapElements(lat, lon, hypo, mag, maxInt);
         }
 
-        // --- 6. 地図上の描画更新 (震源・P/S波) ---
+        // --- 5. 地図上の描画更新 (震源・P/S波) ---
         function updateMapElements(lat, lon, hypo, mag, maxInt) {
             if (hypoMarker) map.removeLayer(hypoMarker);
             if (pWaveCircle) map.removeLayer(pWaveCircle);
@@ -348,7 +301,7 @@
             }).addTo(map);
         }
 
-        // --- 7. P波・S波のリアルタイム拡大アニメーション ---
+        // --- 6. P波・S波のリアルタイム拡大アニメーション ---
         setInterval(() => {
             if (!currentHypo || !earthquakeStartTime) return;
 
