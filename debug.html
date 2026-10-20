@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>リアルタイムEEW & 強震モニタ・PS波マップ (デバッグ版)</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0; padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #0f111a;
+            color: #fff;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        /* サイドパネル（右側） */
+        #sidebar {
+            width: 420px;
+            background-color: #161925;
+            border-left: 1px solid #2a2f45;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -4px 0 15px rgba(0,0,0,0.5);
+            z-index: 1000;
+            order: 2;
+        }
+        .header {
+            padding: 15px;
+            background-color: #1f2438;
+            border-bottom: 1px solid #2a2f45;
+            flex-shrink: 0;
+        }
+        .header h1 { font-size: 1.1rem; margin: 0 0 5px 0; color: #4dabf7; }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        .connected { background-color: #2b8a3e; color: #fff; }
+        .disconnected { background-color: #c92a2a; color: #fff; }
+
+        /* デバッグコントロールパネル */
+        .debug-panel {
+            background-color: #1e2235;
+            padding: 10px 15px;
+            border-bottom: 1px solid #2a2f45;
+            display: flex;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .debug-btn {
+            flex: 1;
+            background-color: #3b5bdb;
+            color: #fff;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .debug-btn:hover { background-color: #364fc7; }
+        .debug-btn.reset { background-color: #c92a2a; }
+        .debug-btn.reset:hover { background-color: #a61e1e; }
+
+        /* ログコンテナ（スクロール可能） */
+        .log-wrapper {
+            padding: 10px 15px 0 15px;
+            font-size: 0.85rem;
+            color: #8b9bb4;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .log-container {
+            height: 100px;
+            margin: 5px 15px 10px 15px;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+            background-color: #0b0d14;
+            color: #51cf66;
+            white-space: pre-wrap;
+            border: 1px solid #2a2f45;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+        
+        /* 右下の強震モニタ埋め込みエリア */
+        .kmoni-section {
+            background-color: #11141d;
+            border-top: 1px solid #2a2f45;
+            padding: 10px 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+        .kmoni-title {
+            width: 100%;
+            font-size: 0.75rem;
+            color: #8b9bb4;
+            font-weight: bold;
+            margin-bottom: 6px;
+            flex-shrink: 0;
+        }
+        
+        .kmoni-frame-wrapper {
+            width: 100%;
+            height: 528px; 
+            overflow: hidden;
+            position: relative;
+            border-radius: 4px;
+            background-color: #000;
+        }
+        .kmoni-frame {
+            width: 1200px;  
+            height: 900px; 
+            border: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform: scale(0.768);
+            transform-origin: top left;
+        }
+
+        /* 警報アラートボックス */
+        .eew-alert {
+            margin: 15px 15px 0 15px;
+            padding: 12px;
+            background-color: #5c1d1d;
+            border: 1px solid #fa5252;
+            border-radius: 6px;
+            display: none;
+            flex-shrink: 0;
+        }
+        .eew-alert.active { display: block; animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        /* 地図領域（左側） */
+        #map {
+            flex: 1;
+            height: 100%;
+            background-color: #1a1a1a;
+            order: 1;
+        }
+
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+            background-color: #1f2438 !important;
+            color: #fff !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 地図コンテナ（左側） -->
+    <div id="map"></div>
+
+    <!-- サイドパネル（右側） -->
+    <div id="sidebar">
+        <div class="header">
+            <h1>🌐 Wolfx EEW リアルタイム監視</h1>
+            <div>WebSocket接続: <span id="wsStatus" class="status-badge disconnected">切断中</span></div>
+        </div>
+
+        <!-- デバッグ用コントロール -->
+        <div class="debug-panel">
+            <button class="debug-btn" onclick="triggerDebugEEW()">🧪 震源デバッグ発令</button>
+            <button class="debug-btn reset" onclick="resetAllLayers()">🔄 終了・リセット</button>
+        </div>
+
+        <div id="alertBox" class="eew-alert">
+            <strong style="color: #ff6b6b;">⚠️ 緊急地震速報 発令中</strong>
+            <p id="alertDetails" style="margin: 5px 0 0 0; font-size: 0.9rem;"></p>
+        </div>
+
+        <!-- ログセクション（スクロール可能） -->
+        <div class="log-wrapper">受信ログ & 地域別予想震度</div>
+        <div id="logBox" class="log-container">システム初期化中...\nデバッグボタンで動作テストが可能です。</div>
+
+        <!-- 右下：強震モニタセクション -->
+        <div class="kmoni-section">
+            <div class="kmoni-title">📈 リアルタイム強震モニタ (eqdata)</div>
+            <div class="kmoni-frame-wrapper">
+                <iframe src="https://eqdata.sakura.ne.jp/kyoshin/2sec_i.html" class="kmoni-frame"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- 1. 地図初期化 (APIキー不要・ダークモード対応) ---
+        const map = L.map('map', {
+            center: [38.0, 137.0],
+            zoom: 5,
+            zoomControl: false
+        });
+
+        L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+        // OSM標準タイルにダークフィルター適用
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        const darkStyle = document.createElement('style');
+        darkStyle.innerHTML = `
+            .leaflet-tile-pane { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
+            .leaflet-container { background-color: #111 !important; }
+        `;
+        document.head.appendChild(darkStyle);
+
+        // --- 2. 状態管理・レイヤー変数 ---
+        let hypoMarker = null;
+        let pWaveCircle = null;
+        let sWaveCircle = null;
+        let currentHypo = null;
+        
+        const P_SPEED = 6.5; // km/s
+        const S_SPEED = 3.5; // km/s
+        let earthquakeStartTime = null;
+
+        const wsStatus = document.getElementById("wsStatus");
+        const logBox = document.getElementById("logBox");
+        const alertBox = document.getElementById("alertBox");
+        const alertDetails = document.getElementById("alertDetails");
+
+        // --- 3. Wolfx WebSocket 常時接続処理 ---
+        const wsUrl = "wss://ws-api.wolfx.jp/jma_eew";
+        let ws;
+
+        function connectWS() {
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                wsStatus.textContent = "接続中 (常時監視)";
+                wsStatus.className = "status-badge connected";
+                appendLog("Wolfx WebSocket に接続しました。");
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "heartbeat") return;
+
+                    if (data.isCancel) {
+                        appendLog(`【キャンセル報】 ID: ${data.ID}`);
+                        resetAllLayers();
+                        return;
+                    }
+
+                    parseEEW(data);
+                } catch (e) {
+                    console.error("JSONパースエラー:", e);
+                }
+            };
+
+            ws.onclose = () => {
+                wsStatus.textContent = "切断 (再接続中...)";
+                wsStatus.className = "status-badge disconnected";
+                appendLog("WebSocketが切断されました。3秒後に再接続します。");
+                setTimeout(connectWS, 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error("WebSocketエラー:", err);
+            };
+        }
+
+        function appendLog(text) {
+            const timeStr = new Date().toLocaleTimeString();
+            logBox.innerHTML += `[${timeStr}] ${text}\n`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        // --- 4. Wolfx対応 EEW電文の解析と文字・地図への反映 ---
+        function parseEEW(data) {
+            const reportNum = data.ReportNum || "?";
+            const hypo = data.HypoCenter || "不明";
+            const mag = data.Magnitude || 0.0;
+            const maxInt = data.MaxIntensity || "不明";
+            const lat = data.Latitude;
+            const lon = data.Longitude;
+            const isFinal = data.isFinal ? "【最終報】" : "";
+            const warnAreas = data.WarnArea || [];
+
+            let logText = `[第${reportNum}報] ${isFinal}\n`;
+            logText += ` ┣ 震源地: ${hypo} (M${mag})\n`;
+            logText += ` ┣ 予想最大震度: ${maxInt}\n`;
+            logText += ` ┗ 警戒地域・予想震度:\n`;
+
+            warnAreas.forEach(area => {
+                const areaName = area.AreaName || "地域不明";
+                const alertType = area.Type || "予報";
+                const intensity = area.MaxIntensity || maxInt;
+                logText += `    ・ ${areaName} (${alertType}) 予想震度: ${intensity}\n`;
+            });
+
+            appendLog(logText);
+
+            if (!lat || !lon) {
+                appendLog("-> 震源の緯度・経度情報がまだ含まれていません。");
+                return;
+            }
+
+            // アラート表示の更新
+            alertBox.classList.add("active");
+            alertDetails.innerHTML = `震源: ${hypo}<br>規模: M${mag} / 最大予想震度: ${maxInt}`;
+
+            currentHypo = { lat: lat, lon: lon };
+            earthquakeStartTime = Date.now();
+
+            updateMapElements(lat, lon, hypo, mag, maxInt);
+        }
+
+        // --- 5. 地図上の描画更新 (震源・P/S波) ---
+        function updateMapElements(lat, lon, hypo, mag, maxInt) {
+            if (hypoMarker) map.removeLayer(hypoMarker);
+            if (pWaveCircle) map.removeLayer(pWaveCircle);
+            if (sWaveCircle) map.removeLayer(sWaveCircle);
+
+            // 震源地マーカー
+            hypoMarker = L.circleMarker([lat, lon], {
+                radius: 8,
+                color: '#fff',
+                weight: 2,
+                fillColor: '#ff4d4f',
+                fillOpacity: 1
+            }).addTo(map).bindPopup(`<b>震源: ${hypo}</b><br>M${mag} / 震度${maxInt}`);
+
+            map.setView([lat, lon], 7);
+
+            // P波サークル (水色)
+            pWaveCircle = L.circle([lat, lon], {
+                radius: 0,
+                color: '#3bc9db',
+                weight: 1,
+                fillColor: '#3bc9db',
+                fillOpacity: 0.1,
+                dashArray: '4, 4'
+            }).addTo(map);
+
+            // S波サークル (赤)
+            sWaveCircle = L.circle([lat, lon], {
+                radius: 0,
+                color: '#ff6b6b',
+                weight: 2,
+                fillColor: '#ff6b6b',
+                fillOpacity: 0.2
+            }).addTo(map);
+        }
+
+        // --- 6. P波・S波のリアルタイム拡大アニメーション ---
+        setInterval(() => {
+            if (!currentHypo || !earthquakeStartTime) return;
+
+            const elapsedSeconds = (Date.now() - earthquakeStartTime) / 1000;
+            const pRadius = P_SPEED * elapsedSeconds * 1000;
+            const sRadius = S_SPEED * elapsedSeconds * 1000;
+
+            if (pWaveCircle) pWaveCircle.setRadius(pRadius);
+            if (sWaveCircle) sWaveCircle.setRadius(sRadius);
+        }, 100);
+
+        function resetAllLayers() {
+            if (hypoMarker) map.removeLayer(hypoMarker);
+            if (pWaveCircle) map.removeLayer(pWaveCircle);
+            if (sWaveCircle) map.removeLayer(sWaveCircle);
+            alertBox.classList.remove("active");
+            currentHypo = null;
+            appendLog("【デバッグ】レイヤーをリセットしました。");
+        }
+
+        // --- 7. Wolfx互換 デバッグ用シミュレート関数 ---
+        function triggerDebugEEW() {
+            const mockWolfxData = {
+                "type": "eew",
+                "ID": "20261020114900",
+                "ReportNum": "1",
+                "isFinal": false,
+                "HypoCenter": "東京湾",
+                "Magnitude": "5.5",
+                "MaxIntensity": "5弱",
+                "Latitude": 35.5,
+                "Longitude": 139.8,
+                "Depth": "40km",
+                "WarnArea": [
+                    { "AreaName": "東京都区部", "Type": "警報", "MaxIntensity": "5弱" },
+                    { "AreaName": "神奈川県東部", "Type": "予報", "MaxIntensity": "4" }
+                ]
+            };
+            appendLog("--- [デバッグ発令] 仮想EEW電文を受信 ---");
+            parseEEW(mockWolfxData);
+        }
+
+        // アプリ起動時に本番WebSocket接続開始
+        connectWS();
+    </script>
+</body>
+</html>
