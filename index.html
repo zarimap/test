@@ -69,23 +69,12 @@
             100% { opacity: 1; }
         }
 
-        /* 地図・強震モニタ領域（左側） */
-        #map-container {
+        /* 地図領域（左側） */
+        #map {
             flex: 1;
             height: 100%;
-            position: relative;
             background-color: #1a1a1a;
             order: 1;
-        }
-
-        /* 底面のLeafletマップ */
-        #map {
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
         }
 
         .leaflet-popup-content-wrapper, .leaflet-popup-tip {
@@ -96,10 +85,8 @@
 </head>
 <body>
 
-    <!-- 左側コンテナ（Leafletマップを敷く） -->
-    <div id="map-container">
-        <div id="map"></div>
-    </div>
+    <!-- 地図コンテナ（左側） -->
+    <div id="map"></div>
 
     <!-- サイドパネル（右側：文字形式の表示） -->
     <div id="sidebar">
@@ -142,47 +129,85 @@
         `;
         document.head.appendChild(darkStyle);
 
-        // --- 2. 強震モニタ画像オーバーレイの設定 (ご指定のエンドポイント形式) ---
-        // 日本全域をカバーする緯度経度境界
-        const imageBounds = [[24.0, 122.0], [46.0, 148.0]];
-        let kyoshinOverlay = null;
+        // --- 2. 地図の動作と完全に同期する iframe レイヤーの定義 ---
+        const IframeLayer = L.Layer.extend({
+            initialize: function(bounds, options) {
+                this._bounds = L.latLngBounds(bounds);
+                L.setOptions(this, options);
+            },
 
-        function updateKyoshinImage() {
-            // 2秒の遅延（タイムラグ）を考慮した日時を生成
-            const targetTime = new Date(Date.now() - 2000); 
+            onAdd: function(map) {
+                this._map = map;
+                
+                // iframe要素の作成
+                this._iframe = L.DomUtil.create('iframe', 'leaflet-kmoni-iframe');
+                this._iframe.style.position = 'absolute';
+                this._iframe.style.border = 'none';
+                this._iframe.style.pointerEvents = 'none'; // マウス操作を下の地図に透過
+                this._iframe.style.opacity = '0.7';
+                this._iframe.style.zIndex = '400';
 
-            const yyyy = targetTime.getFullYear();
-            const MM = String(targetTime.getMonth() + 1).padStart(2, '0');
-            const dd = String(targetTime.getDate()).padStart(2, '0');
-            const hh = String(targetTime.getHours()).padStart(2, '0');
-            const mm = String(targetTime.getMinutes()).padStart(2, '0');
-            
-            // 強震モニタの更新間隔に合わせて秒を2秒刻みに丸める
-            let ss = targetTime.getSeconds();
-            ss = Math.floor(ss / 2) * 2;
-            const ssStr = String(ss).padStart(2, '0');
+                // 初回URL設定
+                this._updateIframeUrl();
 
-            const dateStr = `${yyyy}${MM}${dd}`;
-            const timeStr = `${yyyy}${MM}${dd}${hh}${mm}${ssStr}`;
+                map.getPanes().overlayPane.appendChild(this._iframe);
 
-            // 指定されたエンドポイント構造
-            const imageUrl = `https://www.k01s.bosai.go.jp/data/map_img/RealTimeImg/jma_s/${dateStr}/${timeStr}.jma_s.gif`;
+                // 地図の移動・ズームに同期させるイベントリスナー
+                map.on('viewreset moveend zoomend', this._updatePosition, this);
+                this._updatePosition();
 
-            if (kyoshinOverlay) {
-                map.removeLayer(kyoshinOverlay);
+                // 2秒ごとに最新のGIF URLへ更新
+                this._timer = setInterval(() => {
+                    this._updateIframeUrl();
+                }, 2000);
+            },
+
+            onRemove: function(map) {
+                clearInterval(this._timer);
+                map.getPanes().overlayPane.removeChild(this._iframe);
+                map.off('viewreset moveend zoomend', this._updatePosition, this);
+            },
+
+            _getGifUrl: function() {
+                // 2秒の遅延を考慮した日時生成
+                const targetTime = new Date(Date.now() - 2000);
+                const yyyy = targetTime.getFullYear();
+                const MM = String(targetTime.getMonth() + 1).padStart(2, '0');
+                const dd = String(targetTime.getDate()).padStart(2, '0');
+                const hh = String(targetTime.getHours()).padStart(2, '0');
+                const mm = String(targetTime.getMinutes()).padStart(2, '0');
+                let ss = targetTime.getSeconds();
+                ss = Math.floor(ss / 2) * 2;
+                const ssStr = String(ss).padStart(2, '0');
+
+                const dateStr = `${yyyy}${MM}${dd}`;
+                const timeStr = `${yyyy}${MM}${dd}${hh}${mm}${ssStr}`;
+
+                return `https://www.k01s.bosai.go.jp/data/map_img/RealTimeImg/jma_s/${dateStr}/${timeStr}.jma_s.gif`;
+            },
+
+            _updateIframeUrl: function() {
+                const url = this._getGifUrl();
+                // すでに同じURLでなければ更新
+                if (this._iframe.src !== url) {
+                    this._iframe.src = url;
+                }
+            },
+
+            _updatePosition: function() {
+                // 地図上のピクセル座標に変換してiframeの位置とサイズを同期
+                const p1 = this._map.latLngToLayerPoint(this._bounds.getNorthWest());
+                const p2 = this._map.latLngToLayerPoint(this._bounds.getSouthEast());
+
+                L.DomUtil.setPosition(this._iframe, p1);
+                this._iframe.style.width = (p2.x - p1.x) + 'px';
+                this._iframe.style.height = (p2.y - p1.y) + 'px';
             }
+        });
 
-            // Leafletの画像オーバーレイとして地図上に重ねる（背景地図と完全に同期・連動します）
-            kyoshinOverlay = L.imageOverlay(imageUrl, imageBounds, {
-                opacity: 0.7,
-                interactive: false,
-                crossOrigin: true
-            }).addTo(map);
-        }
-
-        // 初回実行および2秒おきに最新画像へ更新
-        updateKyoshinImage();
-        setInterval(updateKyoshinImage, 2000);
+        // 日本全域をカバーする範囲にiframeレイヤーを配置して地図に追加
+        const kmoniBounds = [[24.0, 122.0], [46.0, 148.0]];
+        const kmoniLayer = new IframeLayer(kmoniBounds).addTo(map);
 
         // --- 3. 状態管理・レイヤー変数 ---
         let hypoMarker = null;
