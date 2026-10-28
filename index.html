@@ -6,29 +6,18 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        html, body {
+        body {
             margin: 0; padding: 0;
-            width: 100%; height: 100%;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #0f111a;
             color: #fff;
             display: flex;
+            height: 100vh;
             overflow: hidden;
-        }
-        /* 地図領域（左側） */
-        #map {
-            flex: 1;
-            height: 100%;
-            min-width: 0;
-            min-height: 0;
-            background-color: #1a1a1a;
-            order: 1;
-            position: relative;
         }
         /* サイドパネル（右側） */
         #sidebar {
-            width: 440px;
-            min-width: 440px;
+            width: 420px;
             background-color: #161925;
             border-left: 1px solid #2a2f45;
             display: flex;
@@ -36,8 +25,6 @@
             box-shadow: -4px 0 15px rgba(0,0,0,0.5);
             z-index: 1000;
             order: 2;
-            overflow-y: auto;
-            height: 100%;
         }
         .header {
             padding: 15px;
@@ -56,49 +43,7 @@
         .connected { background-color: #2b8a3e; color: #fff; }
         .disconnected { background-color: #c92a2a; color: #fff; }
 
-        /* コントロールパネル */
-        .control-panel {
-            background-color: #1e2235;
-            padding: 8px 15px;
-            border-bottom: 1px solid #2a2f45;
-            display: flex;
-            gap: 8px;
-            flex-shrink: 0;
-        }
-        .ctrl-btn {
-            flex: 1;
-            background-color: #3b5bdb;
-            color: #fff;
-            border: none;
-            padding: 6px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .ctrl-btn:hover { background-color: #364fc7; }
-        .ctrl-btn.reset { background-color: #c92a2a; }
-
-        /* 揺れ検出ステータス表示 */
-        .shake-status-box {
-            margin: 10px 15px 0 15px;
-            padding: 10px 12px;
-            background-color: #1a233a;
-            border: 1px solid #3b5bdb;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            flex-shrink: 0;
-        }
-        .shake-status-box.active {
-            background-color: #3b1d1d;
-            border-color: #fa5252;
-            animation: pulse 1.5s infinite;
-        }
-
-        /* ログコンテナ */
+        /* ログコンテナ（スクロール可能） */
         .log-wrapper {
             padding: 10px 15px 0 15px;
             font-size: 0.85rem;
@@ -107,12 +52,12 @@
             flex-shrink: 0;
         }
         .log-container {
-            height: 100px;
+            height: 140px;
             margin: 5px 15px 10px 15px;
             padding: 10px;
             overflow-y: auto;
             font-family: monospace;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             background-color: #0b0d14;
             color: #51cf66;
             white-space: pre-wrap;
@@ -121,7 +66,7 @@
             flex-shrink: 0;
         }
         
-        /* 強震モニタ埋め込みエリア */
+        /* 右下の強震モニタ埋め込みエリア */
         .kmoni-section {
             background-color: #11141d;
             border-top: 1px solid #2a2f45;
@@ -129,7 +74,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            flex-shrink: 0;
+            flex: 1;
         }
         .kmoni-title {
             width: 100%;
@@ -137,10 +82,12 @@
             color: #8b9bb4;
             font-weight: bold;
             margin-bottom: 6px;
+            flex-shrink: 0;
         }
+        
         .kmoni-frame-wrapper {
             width: 100%;
-            height: 380px; 
+            height: 528px; 
             overflow: hidden;
             position: relative;
             border-radius: 4px;
@@ -153,47 +100,13 @@
             position: absolute;
             top: 0;
             left: 0;
-            transform: scale(0.62);
+            transform: scale(0.768);
             transform-origin: top left;
-        }
-
-        /* P2P地震情報履歴セクション */
-        .p2p-section {
-            background-color: #131622;
-            border-top: 1px solid #2a2f45;
-            padding: 12px 15px;
-            flex-shrink: 0;
-        }
-        .p2p-title {
-            font-size: 0.75rem;
-            color: #8b9bb4;
-            font-weight: bold;
-            margin-bottom: 8px;
-        }
-        .p2p-item {
-            background-color: #1a1f30;
-            border: 1px solid #2a2f45;
-            border-radius: 4px;
-            padding: 8px 10px;
-            margin-bottom: 6px;
-            font-size: 0.8rem;
-        }
-        .p2p-item:last-child { margin-bottom: 0; }
-        .p2p-header {
-            display: flex;
-            justify-content: space-between;
-            color: #74c0fc;
-            font-weight: bold;
-            margin-bottom: 2px;
-        }
-        .p2p-details {
-            color: #adb5bd;
-            font-size: 0.75rem;
         }
 
         /* 警報アラートボックス */
         .eew-alert {
-            margin: 10px 15px 0 15px;
+            margin: 15px 15px 0 15px;
             padding: 12px;
             background-color: #5c1d1d;
             border: 1px solid #fa5252;
@@ -206,6 +119,14 @@
             0% { opacity: 1; }
             50% { opacity: 0.6; }
             100% { opacity: 1; }
+        }
+
+        /* 地図領域（左側） */
+        #map {
+            flex: 1;
+            height: 100%;
+            background-color: #1a1a1a;
+            order: 1;
         }
 
         .leaflet-popup-content-wrapper, .leaflet-popup-tip {
@@ -226,35 +147,20 @@
             <div>WebSocket接続: <span id="wsStatus" class="status-badge disconnected">切断中</span></div>
         </div>
 
-        <div class="control-panel">
-            <button class="ctrl-btn" onclick="triggerTestEEW()">🧪 デバッグ発令</button>
-            <button class="ctrl-btn reset" onclick="resetAllLayers()">🔄 リセット</button>
-        </div>
-
         <div id="alertBox" class="eew-alert">
             <strong style="color: #ff6b6b;">⚠️ 緊急地震速報 発令中</strong>
             <p id="alertDetails" style="margin: 5px 0 0 0; font-size: 0.9rem;"></p>
         </div>
 
-        <div id="shakeStatusBox" class="shake-status-box">
-            <div style="font-weight: bold; color: #74c0fc;">🔍 強震モニタ揺れ検出 (srev方式)</div>
-            <div id="shakeStatusText" style="color: #adb5bd;">緑色ノイズフィルター有効：有意な揺れは未検知です。</div>
-        </div>
-
+        <!-- ログセクション（スクロール可能） -->
         <div class="log-wrapper">受信ログ & 地域別予想震度</div>
         <div id="logBox" class="log-container">システム初期化中... WebSocket接続を待機しています。</div>
 
+        <!-- 右下：強震モニタセクション -->
         <div class="kmoni-section">
             <div class="kmoni-title">📈 リアルタイム強震モニタ (eqdata)</div>
             <div class="kmoni-frame-wrapper">
                 <iframe src="https://eqdata.sakura.ne.jp/kyoshin/2sec_i.html" class="kmoni-frame"></iframe>
-            </div>
-        </div>
-
-        <div class="p2p-section">
-            <div class="p2p-title">📋 過去の地震情報 (P2P地震情報API)</div>
-            <div id="p2pList" class="p2p-container">
-                <div class="p2p-item">データを読み込み中...</div>
             </div>
         </div>
     </div>
@@ -262,96 +168,85 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        let map, hypoMarker, pWaveCircle, sWaveCircle, shakeEpicenterMarker, shakeWaveCircle;
+        // --- 1. 地図初期化 (APIキー不要・ダークモード対応) ---
+        const map = L.map('map', {
+            center: [38.0, 137.0],
+            zoom: 5,
+            zoomControl: false
+        });
+
+        L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+        // OSM標準タイルにダークフィルター適用
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        const darkStyle = document.createElement('style');
+        darkStyle.innerHTML = `
+            .leaflet-tile-pane { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
+            .leaflet-container { background-color: #111 !important; }
+        `;
+        document.head.appendChild(darkStyle);
+
+        // --- 2. 状態管理・レイヤー・算出用変数 ---
+        let hypoMarker = null;
+        let pWaveCircle = null;
+        let sWaveCircle = null;
         let currentHypo = null;
+        
         let P_SPEED = 6.5; 
         let S_SPEED = 3.5; 
-        let earthquakeStartTime = null;
+        let earthquakeStartTime = null; // 正確な地震発生時刻（ms）
+
         let reportHistory = [];
 
         const wsStatus = document.getElementById("wsStatus");
         const logBox = document.getElementById("logBox");
         const alertBox = document.getElementById("alertBox");
         const alertDetails = document.getElementById("alertDetails");
-        const shakeStatusBox = document.getElementById("shakeStatusBox");
-        const shakeStatusText = document.getElementById("shakeStatusText");
 
-        // --- 1. DOM・地図の安全な初期化 ---
-        document.addEventListener("DOMContentLoaded", () => {
-            map = L.map('map', {
-                center: [38.0, 137.0],
-                zoom: 5,
-                zoomControl: false
-            });
-
-            L.control.zoom({ position: 'bottomleft' }).addTo(map);
-
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors',
-                maxZoom: 19
-            }).addTo(map);
-
-            const darkStyle = document.createElement('style');
-            darkStyle.innerHTML = `
-                .leaflet-tile-pane { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
-                .leaflet-container { background-color: #111 !important; }
-            `;
-            document.head.appendChild(darkStyle);
-
-            setTimeout(() => { map.invalidateSize(); }, 300);
-
-            // 初期化後に接続等を開始
-            connectWS();
-            fetchP2PQuakeHistory();
-            setInterval(fetchP2PQuakeHistory, 300000);
-        });
-
-        // --- 2. Wolfx WebSocket 接続 ---
+        // --- 3. Wolfx WebSocket 常時接続処理 ---
         const wsUrl = "wss://ws-api.wolfx.jp/jma_eew";
         let ws;
 
         function connectWS() {
-            try {
-                ws = new WebSocket(wsUrl);
+            ws = new WebSocket(wsUrl);
 
-                ws.onopen = () => {
-                    wsStatus.textContent = "接続中 (常時監視)";
-                    wsStatus.className = "status-badge connected";
-                    appendLog("Wolfx WebSocket に接続しました。");
-                };
+            ws.onopen = () => {
+                wsStatus.textContent = "接続中 (常時監視)";
+                wsStatus.className = "status-badge connected";
+                appendLog("Wolfx WebSocket に接続しました。");
+            };
 
-                ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.type === "heartbeat") return;
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "heartbeat") return;
 
-                        if (data.isCancel) {
-                            appendLog(`【キャンセル報】 ID: ${data.ID}`);
-                            resetAllLayers();
-                            return;
-                        }
-
-                        parseEEW(data);
-                    } catch (e) {
-                        console.error("JSONパースエラー:", e);
+                    if (data.isCancel) {
+                        appendLog(`【キャンセル報】 ID: ${data.ID}`);
+                        resetAllLayers();
+                        return;
                     }
-                };
 
-                ws.onclose = () => {
-                    wsStatus.textContent = "切断 (再接続中...)";
-                    wsStatus.className = "status-badge disconnected";
-                    appendLog("WebSocketが切断されました。3秒後に再接続します。");
-                    setTimeout(connectWS, 3000);
-                };
+                    parseEEW(data);
+                } catch (e) {
+                    console.error("JSONパースエラー:", e);
+                }
+            };
 
-                ws.onerror = (err) => {
-                    console.error("WebSocketエラー:", err);
-                };
-            } catch (e) {
-                console.error("WebSocket初期化失敗:", e);
-                wsStatus.textContent = "接続エラー";
+            ws.onclose = () => {
+                wsStatus.textContent = "切断 (再接続中...)";
                 wsStatus.className = "status-badge disconnected";
-            }
+                appendLog("WebSocketが切断されました。3秒後に再接続します。");
+                setTimeout(connectWS, 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error("WebSocketエラー:", err);
+            };
         }
 
         function appendLog(text) {
@@ -360,10 +255,15 @@
             logBox.scrollTop = logBox.scrollHeight;
         }
 
-        // --- 3. 速度算出・EEW解析 ---
+        // --- 4. 2地点間（複数報）による見かけの速度算出関数 ---
         function calculateDynamicVelocity(newReport, lat, lon) {
             const now = Date.now();
-            const currentReportData = { lat: lat, lon: lon, time: now };
+            const currentReportData = {
+                lat: lat,
+                lon: lon,
+                time: now,
+                reportNum: parseInt(newReport.ReportNum || 1)
+            };
 
             if (reportHistory.length > 0) {
                 const prev = reportHistory[reportHistory.length - 1];
@@ -375,46 +275,77 @@
                     if (calculatedSpeed >= 2.0 && calculatedSpeed <= 10.0) {
                         P_SPEED = calculatedSpeed;
                         S_SPEED = calculatedSpeed * 0.55; 
+                        appendLog(`[速度算出] 2報間の差分から速度を動的補正: P波=${P_SPEED.toFixed(2)}km/s`);
                     }
                 }
             }
+
             reportHistory.push(currentReportData);
             if (reportHistory.length > 5) reportHistory.shift();
         }
 
         function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
             const R = 6371;
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-                      Math.sin(dLon/2) * Math.sin(dLon/2);
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
         }
 
+        function deg2rad(deg) {
+            return deg * (Math.PI/180);
+        }
+
+        // --- 5. EEW電文の解析と文字・地図への反映 ---
         function parseEEW(data) {
             const reportNum = data.ReportNum || "?";
-            const hypo = data.Hypocenter || "不明";
+            const hypo = data.Hypocenter || "不明"; // 正しいプロパティ名 Hypocenter
             const mag = data.Magnitude || 0.0;
             const maxInt = data.MaxIntensity || "不明";
             const depth = data.Depth || "不明"; 
             const lat = data.Latitude;
             const lon = data.Longitude;
-            const originTimeString = data.OriginTime;
+            const originTimeString = data.OriginTime; // "YYYY/MM/DD HH:mm:ss"
             const isFinal = data.isFinal ? "【最終報】" : "";
+            const warnAreas = data.WarnArea || [];
 
             let logText = `[第${reportNum}報] ${isFinal}\n`;
             logText += ` ┣ 震源地: ${hypo} (深さ: ${depth})\n`;
+            logText += ` ┣ 発生時刻: ${originTimeString}\n`;
             logText += ` ┣ 規模: M${mag} / 最大予想震度: ${maxInt}\n`;
+            logText += ` ┗ 警戒地域・予想震度:\n`;
+
+            warnAreas.forEach(area => {
+                const areaName = area.AreaName || "地域不明";
+                const alertType = area.Type || "予報";
+                const intensity = area.MaxIntensity || maxInt;
+                logText += `    ・ ${areaName} (${alertType}) 予想震度: ${intensity}\n`;
+            });
+
             appendLog(logText);
 
-            if (!lat || !lon) return;
-
-            if (originTimeString) {
-                const parsedTime = new Date(originTimeString.replace(/\//g, '-')).getTime();
-                if (!isNaN(parsedTime)) earthquakeStartTime = parsedTime;
+            if (!lat || !lon) {
+                appendLog("-> 震源の緯度・経度情報がまだ含まれていません。");
+                return;
             }
-            if (!earthquakeStartTime) earthquakeStartTime = Date.now();
+
+            // OriginTime（地震発生時刻文字列）をミリ秒タイムスタンプに変換して初期化
+            if (originTimeString) {
+                // "YYYY/MM/DD HH:mm:ss" を JSで解釈可能な "YYYY-MM-DDTHH:mm:ss" に置換してパース
+                const parsedTime = new Date(originTimeString.replace(/\//g, '-')).getTime();
+                if (!isNaN(parsedTime)) {
+                    earthquakeStartTime = parsedTime;
+                }
+            }
+            
+            // 万が一 OriginTime が取得できない場合のフォールバック
+            if (!earthquakeStartTime) {
+                earthquakeStartTime = Date.now();
+            }
 
             calculateDynamicVelocity(data, lat, lon);
 
@@ -422,128 +353,11 @@
             alertDetails.innerHTML = `震源: ${hypo} (深さ: ${depth})<br>規模: M${mag} / 最大予想震度: ${maxInt}`;
 
             currentHypo = { lat: lat, lon: lon };
+
             updateMapElements(lat, lon, hypo, mag, maxInt, depth);
         }
 
-        // --- 4. srev方式・ノイズ除外揺れ検出ロジック ---
-        function checkKyoshinImageShake() {
-            if (currentHypo) {
-                const jitterLat = currentHypo.lat + (Math.random() - 0.5) * 0.08;
-                const jitterLon = currentHypo.lon + (Math.random() - 0.5) * 0.08;
-                updateShakeDetectionUI({ lat: jitterLat, lon: jitterLon }, true);
-            } else {
-                updateShakeDetectionUI(null, false);
-            }
-        }
-
-        function updateShakeDetectionUI(coordinates, isShaking) {
-            if (isShaking && coordinates) {
-                shakeStatusBox.classList.add("active");
-                const latStr = coordinates.lat.toFixed(2);
-                const lonStr = coordinates.lon.toFixed(2);
-                
-                shakeStatusText.innerHTML = `🔥 <b>揺れ検出：北緯${latStr}° 東経${lonStr}° 付近</b><br><span style="font-size:0.75rem; color:#ffa94d;">(srevノイズフィルター通過 / Gal観測)</span>`;
-
-                if (!shakeEpicenterMarker) {
-                    shakeEpicenterMarker = L.circleMarker([coordinates.lat, coordinates.lon], {
-                        radius: 6,
-                        color: '#ff922b',
-                        weight: 2,
-                        fillColor: '#f59f00',
-                        fillOpacity: 1
-                    }).addTo(map).bindPopup("<b>強震モニタ 揺れ検出地点 (srev)</b>");
-                } else {
-                    shakeEpicenterMarker.setLatLng([coordinates.lat, coordinates.lon]);
-                }
-
-                if (!shakeWaveCircle) {
-                    shakeWaveCircle = L.circle([coordinates.lat, coordinates.lon], {
-                        radius: 0,
-                        color: '#f59f00',
-                        weight: 2,
-                        fillColor: '#f59f00',
-                        fillOpacity: 0.15,
-                        dashArray: '6, 6'
-                    }).addTo(map);
-                } else {
-                    shakeWaveCircle.setLatLng([coordinates.lat, coordinates.lon]);
-                }
-            } else {
-                shakeStatusBox.classList.remove("active");
-                shakeStatusText.innerHTML = "緑色ノイズフィルター有効：有意な揺れは未検知です。";
-                
-                if (shakeWaveCircle) {
-                    map.removeLayer(shakeWaveCircle);
-                    shakeWaveCircle = null;
-                }
-                if (shakeEpicenterMarker) {
-                    map.removeLayer(shakeEpicenterMarker);
-                    shakeEpicenterMarker = null;
-                }
-            }
-        }
-
-        // --- 5. P2P地震情報API取得 ---
-        async function fetchP2PQuakeHistory() {
-            try {
-                const response = await fetch('https://api.p2pquake.net/v2/history?codes=551&limit=3');
-                if (!response.ok) throw new Error('Network response was not ok');
-                const data = await response.json();
-                
-                const p2pList = document.getElementById("p2pList");
-                p2pList.innerHTML = "";
-
-                data.forEach(item => {
-                    const eq = item.earthquake;
-                    const time = new Date(eq.time).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                    const hypo = eq.hypoCenter.name || "不明";
-                    const mag = eq.hypoCenter.magnitude >= 0 ? `M${eq.hypoCenter.magnitude}` : "M不明";
-                    const maxScale = formatScale(eq.maxScale);
-
-                    const div = document.createElement("div");
-                    div.className = "p2p-item";
-                    div.innerHTML = `
-                        <div class="p2p-header">
-                            <span>${time} 頃</span>
-                            <span style="color: #ff6b6b;">最大震度 ${maxScale}</span>
-                        </div>
-                        <div class="p2p-details">震源: ${hypo} / 規模: ${mag}</div>
-                    `;
-                    p2pList.appendChild(div);
-                });
-            } catch (err) {
-                console.error("P2P地震情報の取得に失敗しました:", err);
-                document.getElementById("p2pList").innerHTML = `<div class="p2p-item" style="color: #fa5252;">地震履歴の取得に失敗しました</div>`;
-            }
-        }
-
-        function formatScale(scale) {
-            const scaleMap = {
-                10: '1', 20: '2', 30: '3', 40: '4',
-                45: '5弱', 50: '5強', 55: '6弱', 60: '6強', 70: '7'
-            };
-            return scaleMap[scale] || '不明';
-        }
-
-        // --- 6. テスト・描画更新ループ ---
-        function triggerTestEEW() {
-            const mockData = {
-                "type": "eew",
-                "ReportNum": "1",
-                "Hypocenter": "茨城県南部",
-                "Magnitude": "5.2",
-                "MaxIntensity": "5弱",
-                "Depth": "50km",
-                "Latitude": 36.1,
-                "Longitude": 140.0,
-                "OriginTime": new Date().toISOString().replace(/-/g, '/').replace('T', ' ').substring(0, 19),
-                "isFinal": false,
-                "WarnArea": [{"AreaName": "茨城県南部", "Type": "警報", "MaxIntensity": "5弱"}]
-            };
-            appendLog("--- [テスト発令] 仮想EEWを受信 ---");
-            parseEEW(mockData);
-        }
-
+        // --- 6. 地図上の描画更新 (震源・P/S波) ---
         function updateMapElements(lat, lon, hypo, mag, maxInt, depth) {
             if (hypoMarker) map.removeLayer(hypoMarker);
             if (pWaveCircle) map.removeLayer(pWaveCircle);
@@ -559,38 +373,51 @@
 
             map.setView([lat, lon], 7);
 
-            pWaveCircle = L.circle([lat, lon], { radius: 0, color: '#3bc9db', weight: 1, fillOpacity: 0.1, dashArray: '4, 4' }).addTo(map);
-            sWaveCircle = L.circle([lat, lon], { radius: 0, color: '#ff6b6b', weight: 2, fillOpacity: 0.2 }).addTo(map);
+            pWaveCircle = L.circle([lat, lon], {
+                radius: 0,
+                color: '#3bc9db',
+                weight: 1,
+                fillColor: '#3bc9db',
+                fillOpacity: 0.1,
+                dashArray: '4, 4'
+            }).addTo(map);
+
+            sWaveCircle = L.circle([lat, lon], {
+                radius: 0,
+                color: '#ff6b6b',
+                weight: 2,
+                fillColor: '#ff6b6b',
+                fillOpacity: 0.2
+            }).addTo(map);
         }
 
+        // --- 7. P波・S波のリアルタイム拡大アニメーション（OriginTime起点） ---
         setInterval(() => {
-            if (currentHypo && earthquakeStartTime) {
-                const elapsedSeconds = (Date.now() - earthquakeStartTime) / 1000;
-                if (elapsedSeconds >= 0) {
-                    if (pWaveCircle) pWaveCircle.setRadius(P_SPEED * elapsedSeconds * 1000);
-                    if (sWaveCircle) sWaveCircle.setRadius(S_SPEED * elapsedSeconds * 1000);
-                    if (shakeWaveCircle) shakeWaveCircle.setRadius((S_SPEED * 0.95) * elapsedSeconds * 1000);
-                }
-            }
-            checkKyoshinImageShake();
+            if (!currentHypo || !earthquakeStartTime) return;
+
+            // 地震発生時刻からの正確な経過秒数を計算
+            const elapsedSeconds = (Date.now() - earthquakeStartTime) / 1000;
+            if (elapsedSeconds < 0) return; // 未来時刻への配慮
+
+            const pRadius = P_SPEED * elapsedSeconds * 1000;
+            const sRadius = S_SPEED * elapsedSeconds * 1000;
+
+            if (pWaveCircle) pWaveCircle.setRadius(pRadius);
+            if (sWaveCircle) sWaveCircle.setRadius(sRadius);
         }, 100);
 
         function resetAllLayers() {
             if (hypoMarker) map.removeLayer(hypoMarker);
             if (pWaveCircle) map.removeLayer(pWaveCircle);
             if (sWaveCircle) map.removeLayer(sWaveCircle);
-            if (shakeWaveCircle) map.removeLayer(shakeWaveCircle);
-            if (shakeEpicenterMarker) map.removeLayer(shakeEpicenterMarker);
-            
-            shakeWaveCircle = null;
-            shakeEpicenterMarker = null;
             alertBox.classList.remove("active");
             currentHypo = null;
             earthquakeStartTime = null;
             reportHistory = [];
-            updateShakeDetectionUI(null, false);
-            appendLog("全レイヤーをリセットしました。");
         }
+
+        // アプリ起動時に接続開始
+        connectWS();
     </script>
 </body>
 </html>
