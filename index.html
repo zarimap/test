@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>リアルタイムEEW & 強震モニタ・PS波マップ</title>
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
     <style>
         body {
             margin: 0; padding: 0;
@@ -15,7 +14,6 @@
             height: 100vh;
             overflow: hidden;
         }
-        /* サイドパネル（右側） */
         #sidebar {
             width: 420px;
             background-color: #161925;
@@ -42,8 +40,7 @@
         }
         .connected { background-color: #2b8a3e; color: #fff; }
         .disconnected { background-color: #c92a2a; color: #fff; }
-
-        /* ログコンテナ（スクロール可能） */
+        
         .log-wrapper {
             padding: 10px 15px 0 15px;
             font-size: 0.85rem;
@@ -65,8 +62,6 @@
             border-radius: 4px;
             flex-shrink: 0;
         }
-        
-        /* 右下の強震モニタ埋め込みエリア */
         .kmoni-section {
             background-color: #11141d;
             border-top: 1px solid #2a2f45;
@@ -84,7 +79,6 @@
             margin-bottom: 6px;
             flex-shrink: 0;
         }
-        
         .kmoni-frame-wrapper {
             width: 100%;
             height: 528px; 
@@ -103,8 +97,6 @@
             transform: scale(0.768);
             transform-origin: top left;
         }
-
-        /* 警報アラートボックス */
         .eew-alert {
             margin: 15px 15px 0 15px;
             padding: 12px;
@@ -121,7 +113,6 @@
             100% { opacity: 1; }
         }
 
-        /* 地図領域（左側） */
         #map {
             flex: 1;
             height: 100%;
@@ -136,11 +127,7 @@
     </style>
 </head>
 <body>
-
-    <!-- 地図コンテナ（左側） -->
     <div id="map"></div>
-
-    <!-- サイドパネル（右側） -->
     <div id="sidebar">
         <div class="header">
             <h1>🌐 Wolfx EEW リアルタイム監視</h1>
@@ -151,12 +138,8 @@
             <strong style="color: #ff6b6b;">⚠️ 緊急地震速報 発令中</strong>
             <p id="alertDetails" style="margin: 5px 0 0 0; font-size: 0.9rem;"></p>
         </div>
-
-        <!-- ログセクション（スクロール可能） -->
         <div class="log-wrapper">受信ログ & 地域別予想震度</div>
         <div id="logBox" class="log-container">システム初期化中... WebSocket接続を待機しています。</div>
-
-        <!-- 右下：強震モニタセクション -->
         <div class="kmoni-section">
             <div class="kmoni-title">📈 リアルタイム強震モニタ (eqdata)</div>
             <div class="kmoni-frame-wrapper">
@@ -164,11 +147,9 @@
             </div>
         </div>
     </div>
-
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
     <script>
-        // --- 1. 地図初期化 (APIキー不要・ダークモード対応) ---
+        // 地図初期化
         const map = L.map('map', {
             center: [38.0, 137.0],
             zoom: 5,
@@ -190,7 +171,7 @@
         `;
         document.head.appendChild(darkStyle);
 
-        // --- 2. 状態管理・レイヤー・算出用変数 ---
+        // 状態管理・レイヤー・算出用変数
         let hypoMarker = null;
         let pWaveCircle = null;
         let sWaveCircle = null;
@@ -207,7 +188,7 @@
         const alertBox = document.getElementById("alertBox");
         const alertDetails = document.getElementById("alertDetails");
 
-        // --- 3. Wolfx WebSocket 常時接続処理 ---
+        // Wolfx WebSocket 常時接続処理
         const wsUrl = "wss://ws-api.wolfx.jp/jma_eew";
         let ws;
 
@@ -255,7 +236,7 @@
             logBox.scrollTop = logBox.scrollHeight;
         }
 
-        // --- 4. 2地点間（複数報）による見かけの速度算出関数 ---
+        // 地点間（複数報）による見かけの速度算出関数
         function calculateDynamicVelocity(newReport, lat, lon) {
             const now = Date.now();
             const currentReportData = {
@@ -300,7 +281,7 @@
             return deg * (Math.PI/180);
         }
 
-        // --- 5. EEW電文の解析と文字・地図への反映 ---
+        // EEW電文の解析と文字・地図への反映
         function parseEEW(data) {
             const reportNum = data.ReportNum || "?";
             const hypo = data.Hypocenter || "不明"; // 正しいプロパティ名 Hypocenter
@@ -342,7 +323,7 @@
                 }
             }
             
-            // 万が一 OriginTime が取得できない場合のフォールバック
+            // 万が一OriginTimeが取得できない場合のフォールバック
             if (!earthquakeStartTime) {
                 earthquakeStartTime = Date.now();
             }
@@ -357,7 +338,7 @@
             updateMapElements(lat, lon, hypo, mag, maxInt, depth);
         }
 
-        // --- 6. 地図上の描画更新 (震源・P/S波) ---
+        // 地図上の描画更新 (震源・P/S波) 
         function updateMapElements(lat, lon, hypo, mag, maxInt, depth) {
             if (hypoMarker) map.removeLayer(hypoMarker);
             if (pWaveCircle) map.removeLayer(pWaveCircle);
@@ -391,7 +372,7 @@
             }).addTo(map);
         }
 
-        // --- 7. P波・S波のリアルタイム拡大アニメーション（OriginTime起点） ---
+        // P波・S波のリアルタイム拡大アニメーション（OriginTime起点）
         setInterval(() => {
             if (!currentHypo || !earthquakeStartTime) return;
 
@@ -416,7 +397,7 @@
             reportHistory = [];
         }
 
-        // アプリ起動時に接続開始
+        // Web Socket
         connectWS();
     </script>
 </body>
