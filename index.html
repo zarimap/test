@@ -125,7 +125,7 @@
         #p2pModalOverlay {
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
-            background-color: rgba(0, 0, 0, 0.7);
+            background-color: rgba(0, 0, 0, 0.72);
             display: none;
             justify-content: center;
             align-items: center;
@@ -136,12 +136,12 @@
             background-color: #161925;
             border: 1px solid #3b5bdb;
             border-radius: 8px;
-            width: 650px;
-            max-width: 90vw;
-            max-height: 85vh;
+            width: 680px;
+            max-width: 92vw;
+            max-height: 88vh;
             display: flex;
             flex-direction: column;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.8);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.85);
             overflow: hidden;
         }
         .p2p-modal-header {
@@ -170,15 +170,49 @@
             gap: 8px;
             font-size: 0.85rem;
             background-color: #0b0d14;
-            padding: 10px;
+            padding: 10px 12px;
             border-radius: 4px;
             border: 1px solid #2a2f45;
         }
         #p2pModalMap {
             width: 100%;
-            height: 350px;
+            height: 340px;
             border-radius: 4px;
             background-color: #111;
+            flex-shrink: 0;
+        }
+        .p2p-points-list {
+            background-color: #0b0d14;
+            border: 1px solid #2a2f45;
+            border-radius: 4px;
+            padding: 10px 12px;
+            font-size: 0.8rem;
+            max-height: 130px;
+            overflow-y: auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .p2p-point-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 7px;
+            border-radius: 4px;
+            background-color: #161925;
+            border: 1px solid #2a2f45;
+            color: #e9ecef;
+        }
+        .p2p-color-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            border: 1px solid rgba(255,255,255,0.35);
+        }
+        .custom-hypo-cross {
+            background: transparent;
+            border: none;
         }
 
         .leaflet-popup-content-wrapper, .leaflet-popup-tip {
@@ -211,14 +245,15 @@
 
     <!-- P2P地震情報カスタムポップアップ用モーダル -->
     <div id="p2pModalOverlay" onclick="closeP2PModal()">
-        <div class="p2p-modal-content" onclick="event.stopPropagation()">
+        <div class="p2p-modal-content" onclick="event.stopPropagation(); resetModalInactivityTimer();">
             <div class="p2p-modal-header">
                 <h3 id="p2pModalTitle">地震情報詳細</h3>
-                <button class="p2p-modal-close" onclick="closeP2PModal()">✕</button>
+                <button class="p2p-modal-close" type="button" onclick="closeP2PModal()">✕</button>
             </div>
-            <div class="p2p-modal-body">
+            <div class="p2p-modal-body" onscroll="resetModalInactivityTimer()">
                 <div class="p2p-info-grid" id="p2pModalInfo"></div>
                 <div id="p2pModalMap"></div>
+                <div class="p2p-points-list" id="p2pModalPoints"></div>
             </div>
         </div>
     </div>
@@ -230,28 +265,21 @@
         const scaleColorMap = {
             10: "#2b82c9", // 震度1: 青
             20: "#50cc50", // 震度2: 黄緑
-            30: "#e6e600", // 震度3: 黄
-            45: "#ff9900", // 震度4: オレンジ
-            50: "#ff2600", // 震度5弱: 赤（薄め）
+            30: "#e6e600", // 震度3: 黄色
+            40: "#ff9900", // 震度4: オレンジ
+            45: "#ff9900", // 震度4相当: オレンジ
+            50: "#ff5c5c", // 震度5弱: 赤（薄め）
             55: "#b30000", // 震度5強: 赤（濃いめ）
-            60: "#a800a8", // 震度6弱: 紫（薄め）
-            65: "#550055", // 震度6強: 紫（濃いめ）
-            70: "#220022"  // 震度7: 紫（黒に近い）
+            60: "#c77dff", // 震度6弱: 紫（薄め）
+            65: "#7209b7", // 震度6強: 紫（濃いめ）
+            70: "#240046"  // 震度7: 紫（黒に近い）
         };
 
         function getScaleColor(scale) {
-            return scaleColorMap[scale] || "#555555";
+            return scaleColorMap[scale] || "#6c757d";
         }
 
-        // --- 音声再生用ヘルパー関数 ---
-        function playAudio(filename) {
-            const audio = new Audio(filename);
-            audio.play().catch(err => {
-                console.log("音声再生ブロックまたはファイル未存在:", err);
-            });
-        }
-
-        // --- 地図初期化 ---
+        // --- メイン地図初期化 ---
         const map = L.map('map', {
             center: [38.0, 137.0],
             zoom: 5,
@@ -261,14 +289,14 @@
         L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(map);
 
         const darkStyle = document.createElement('style');
         darkStyle.innerHTML = `
-            .leaflet-tile-pane { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
-            .leaflet-container { background-color: #111 !important; }
+            #map .leaflet-tile-pane { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
+            #map.leaflet-container { background-color: #111 !important; }
         `;
         document.head.appendChild(darkStyle);
 
@@ -278,13 +306,16 @@
 
         function initP2PModalMap() {
             if (!p2pModalMap) {
-                p2pModalMap = L.map('p2pModalMap', { zoomControl: false }).setView([38.0, 137.0], 5);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(p2pModalMap);
+                p2pModalMap = L.map('p2pModalMap', { zoomControl: true }).setView([38.0, 137.0], 5);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(p2pModalMap);
                 
                 const modalDarkStyle = document.createElement('style');
                 modalDarkStyle.innerHTML = `
                     #p2pModalMap .leaflet-tile-pane { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
-                    #p2pModalMap { background-color: #111 !important; }
+                    #p2pModalMap.leaflet-container { background-color: #111 !important; }
                 `;
                 document.head.appendChild(modalDarkStyle);
 
@@ -329,7 +360,6 @@
 
                     if (data.isCancel) {
                         appendLog(`【キャンセル報】 ID: ${data.ID}`);
-                        playAudio("eewC.mp3");
                         resetAllLayers();
                         return;
                     }
@@ -389,7 +419,7 @@
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
-        // --- EEW解析 & 音声振り分け ---
+        // --- EEW解析 ---
         function parseEEW(data) {
             const reportNum = parseInt(data.ReportNum || 1);
             const hypo = data.Hypocenter || "不明"; 
@@ -400,22 +430,6 @@
             const lon = data.Longitude;
             const originTimeString = data.OriginTime; 
             const isFinal = data.isFinal;
-            const warnAreas = data.WarnArea || [];
-
-            if (isFinal) {
-                playAudio("koushinE.mp3");
-            } else if (reportNum > 1) {
-                playAudio("koushin.mp3");
-            } else {
-                let maxIntVal = parseMaxIntensityValue(maxInt);
-                if (maxIntVal >= 50) {
-                    playAudio("eew5.mp3");
-                } else if (maxIntVal >= 30) {
-                    playAudio("eew3.mp3");
-                } else {
-                    playAudio("eew0.mp3");
-                }
-            }
 
             let logText = `[第${reportNum}報] ${isFinal ? "【最終報】" : ""}\n`;
             logText += ` ┣ 震源地: ${hypo} (深さ: ${depth})\n`;
@@ -445,20 +459,6 @@
                     resetAllLayers();
                 }, 5 * 60 * 1000);
             }
-        }
-
-        function parseMaxIntensityValue(str) {
-            if (!str) return 0;
-            if (str.includes("7")) return 70;
-            if (str.includes("6強")) return 65;
-            if (str.includes("6弱")) return 60;
-            if (str.includes("5強")) return 55;
-            if (str.includes("5弱")) return 50;
-            if (str.includes("4")) return 40;
-            if (str.includes("3")) return 30;
-            if (str.includes("2")) return 20;
-            if (str.includes("1")) return 10;
-            return 0;
         }
 
         function updateMapElements(lat, lon, hypo, mag, maxInt, depth) {
@@ -500,18 +500,27 @@
             if (finalReportTimer) { clearTimeout(finalReportTimer); finalReportTimer = null; }
         }
 
-        // --- P2P地震情報 API & カスタムポップアップ・音声処理（バグ修正済み） ---
+        // --- P2P地震情報 API & カスタムポップアップ処理 ---
         let lastProcessedId = null;
         let modalTimeout = null;
+        const MODAL_INACTIVITY_MS = 90000; // 1分半（90秒）
 
-        // 起動時に現在の最新地震IDを記憶し、誤爆（過去の地震で音声が鳴る現象）を防止
+        function resetModalInactivityTimer() {
+            const overlay = document.getElementById("p2pModalOverlay");
+            if (!overlay.classList.contains("active")) return;
+            if (modalTimeout) clearTimeout(modalTimeout);
+            modalTimeout = setTimeout(() => {
+                closeP2PModal();
+            }, MODAL_INACTIVITY_MS);
+        }
+
         async function initP2P() {
             try {
                 const response = await fetch('https://api.p2pquake.net/v2/history?codes=551&limit=1');
                 if (!response.ok) return;
                 const data = await response.json();
                 if (data && data.length > 0) {
-                    lastProcessedId = data[0].id; // 既存の最新IDを保持するだけで音声は鳴らさない
+                    lastProcessedId = data[0].id;
                 }
             } catch (err) {
                 console.error("P2P初期化エラー:", err);
@@ -528,89 +537,110 @@
                     if (lastProcessedId === null) {
                         lastProcessedId = item.id;
                     } else if (lastProcessedId !== item.id) {
-                        // 本当に新しい地震データが検知された場合のみ更新して発火
                         lastProcessedId = item.id;
-                        processP2PEvent(item, true);
+                        showP2PModal(item);
                     }
                 }
-            } catch (e) {}
-        }
-
-        function processP2PEvent(item, isNew = false) {
-            const issue = item.issue;
-            
-            if (isNew && issue && issue.type) {
-                if (issue.type === "ScalePrompt") {
-                    playAudio("VXSE51.mp3");
-                } else if (issue.type === "ScaleAndDestination" || issue.type === "Destination") {
-                    playAudio("VXSE52.mp3");
-                } else if (issue.type === "DetailScale") {
-                    playAudio("VXSE53.mp3");
-                }
-            }
-
-            if (isNew) {
-                showP2PModal(item);
+            } catch (err) {
+                console.error("P2Pポーリングエラー:", err);
             }
         }
 
         function showP2PModal(item) {
-            const issue = item.issue;
-            const eq = item.earthquake;
-            const points = item.points || [];
+            try {
+                const issue = item.issue || {};
+                const eq = item.earthquake || {};
+                const hypo = eq.hypocenter || {};
+                const points = Array.isArray(item.points) ? item.points : [];
 
-            document.getElementById("p2pModalTitle").textContent = `地震情報 (${issue.type || "詳細"}) - ${issue.time || ""}`;
-            
-            const infoGrid = document.getElementById("p2pModalInfo");
-            infoGrid.innerHTML = `
-                <div><b>発生時刻:</b> ${eq.time}</div>
-                <div><b>震源地:</b> ${eq.hypoCenter.name || "不明"}</div>
-                <div><b>深さ:</b> ${eq.hypoCenter.depth} km</div>
-                <div><b>規模 (M):</b> ${eq.hypoCenter.magnitude}</div>
-                <div><b>最大震度:</b> ${formatScale(eq.maxScale)}</div>
-                <div><b>情報種類:</b> ${issue.type}</div>
-            `;
+                const issueTypeLabel = formatIssueType(issue.type);
+                document.getElementById("p2pModalTitle").textContent =
+                    `地震情報（${issueTypeLabel}） - ${issue.time || eq.time || ""}`;
 
-            const overlay = document.getElementById("p2pModalOverlay");
-            overlay.classList.add("active");
+                const depthText = (typeof hypo.depth === "number" && hypo.depth >= 0)
+                    ? `${hypo.depth} km`
+                    : "不明";
+                const magText = (typeof hypo.magnitude === "number" && hypo.magnitude >= 0)
+                    ? `M${hypo.magnitude.toFixed(1)}`
+                    : "不明";
 
-            initP2PModalMap();
-            p2pLayerGroup.clearLayers();
+                const infoGrid = document.getElementById("p2pModalInfo");
+                infoGrid.innerHTML = `
+                    <div><b>発生時刻:</b> ${eq.time || "不明"}</div>
+                    <div><b>震源地:</b> ${hypo.name || "不明"}</div>
+                    <div><b>深さ:</b> ${depthText}</div>
+                    <div><b>規模 (M):</b> ${magText}</div>
+                    <div><b>最大震度:</b> ${formatScale(eq.maxScale)}</div>
+                    <div><b>発表種類:</b> ${issueTypeLabel}</div>
+                `;
 
-            if (eq.hypoCenter.latitude >= 0 && eq.hypoCenter.longitude >= 0) {
-                const hypoIcon = L.divIcon({
-                    className: 'custom-hypo-cross',
-                    html: `<div style="font-size: 24px; font-weight: bold; color: #ff2600; text-shadow: -2px -2px 0 #e6e600, 2px -2px 0 #e6e600, -2px 2px 0 #e6e600, 2px 2px 0 #e6e600; line-height: 24px; text-align: center;">×</div>`,
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15]
-                });
-                L.marker([eq.hypoCenter.latitude, eq.hypoCenter.longitude], { icon: hypoIcon }).addTo(p2pLayerGroup)
-                  .bindPopup(`<b>震源: ${eq.hypoCenter.name}</b>`);
-                
-                p2pModalMap.setView([eq.hypoCenter.latitude, eq.hypoCenter.longitude], 6);
-            } else {
-                p2pModalMap.setView([38.0, 137.0], 5);
-            }
+                const overlay = document.getElementById("p2pModalOverlay");
+                overlay.classList.add("active");
 
-            points.forEach(p => {
-                if (p.latitude && p.longitude) {
-                    const color = getScaleColor(p.scale);
-                    L.circleMarker([p.latitude, p.longitude], {
-                        radius: 5,
-                        color: '#000',
-                        weight: 1,
-                        fillColor: color,
-                        fillOpacity: 0.9
-                    }).addTo(p2pLayerGroup).bindPopup(`${p.addr}: 震度${formatScale(p.scale)}`);
+                initP2PModalMap();
+                p2pLayerGroup.clearLayers();
+
+                const hasValidCoords =
+                    typeof hypo.latitude === "number" &&
+                    typeof hypo.longitude === "number" &&
+                    hypo.latitude >= -90 && hypo.latitude <= 90 &&
+                    hypo.longitude >= -180 && hypo.longitude <= 180;
+
+                if (hasValidCoords) {
+                    const hypoIcon = L.divIcon({
+                        className: 'custom-hypo-cross',
+                        html: `<div style="font-size: 28px; font-weight: bold; color: #ff1e1e; text-shadow: -2px -2px 0 #ffd43b, 2px -2px 0 #ffd43b, -2px 2px 0 #ffd43b, 2px 2px 0 #ffd43b, 0 0 6px #ffd43b; line-height: 28px; text-align: center;">×</div>`,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16]
+                    });
+                    L.marker([hypo.latitude, hypo.longitude], { icon: hypoIcon, zIndexOffset: 500 })
+                        .addTo(p2pLayerGroup)
+                        .bindPopup(`<b>震源: ${hypo.name || "不明"}</b><br>深さ: ${depthText} / ${magText}`);
+
+                    p2pModalMap.setView([hypo.latitude, hypo.longitude], 6);
+                } else {
+                    p2pModalMap.setView([38.0, 137.0], 5);
                 }
-            });
 
-            setTimeout(() => { p2pModalMap.invalidateSize(); }, 200);
+                const pointsContainer = document.getElementById("p2pModalPoints");
+                pointsContainer.innerHTML = "";
 
-            if (modalTimeout) clearTimeout(modalTimeout);
-            modalTimeout = setTimeout(() => {
-                closeP2PModal();
-            }, 90000);
+                // 震度の強い順に並べて表示・描画
+                const sortedPoints = [...points].sort((a, b) => (b.scale || 0) - (a.scale || 0));
+
+                if (sortedPoints.length === 0) {
+                    pointsContainer.innerHTML = `<span style="color:#adb5bd;">観測点・地域震度データはありません。</span>`;
+                } else {
+                    sortedPoints.forEach(p => {
+                        const color = getScaleColor(p.scale);
+                        const scaleLabel = formatScale(p.scale);
+                        const name = p.addr || p.pref || "地域不明";
+
+                        if (typeof p.latitude === "number" && typeof p.longitude === "number") {
+                            L.circleMarker([p.latitude, p.longitude], {
+                                radius: 6,
+                                color: '#111',
+                                weight: 1,
+                                fillColor: color,
+                                fillOpacity: 0.92
+                            }).addTo(p2pLayerGroup).bindPopup(`<b>${name}</b><br>震度 ${scaleLabel}`);
+                        }
+
+                        const badge = document.createElement("span");
+                        badge.className = "p2p-point-badge";
+                        badge.innerHTML = `<span class="p2p-color-dot" style="background-color:${color};"></span><span>${name}</span><strong>震度${scaleLabel}</strong>`;
+                        pointsContainer.appendChild(badge);
+                    });
+                }
+
+                setTimeout(() => {
+                    if (p2pModalMap) p2pModalMap.invalidateSize();
+                }, 150);
+
+                resetModalInactivityTimer();
+            } catch (err) {
+                console.error("P2Pモーダル表示エラー:", err);
+            }
         }
 
         function closeP2PModal() {
@@ -622,10 +652,26 @@
             }
         }
 
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") closeP2PModal();
+        });
+
+        function formatIssueType(type) {
+            const typeMap = {
+                "ScalePrompt": "震度速報",
+                "Destination": "震源に関する情報",
+                "ScaleAndDestination": "震源・震度に関する情報",
+                "DetailScale": "各地の震度に関する情報",
+                "Foreign": "遠地地震に関する情報",
+                "Other": "その他の情報"
+            };
+            return typeMap[type] || type || "地震情報";
+        }
+
         function formatScale(scale) {
             const scaleMap = {
                 10: '1', 20: '2', 30: '3', 40: '4',
-                45: '5弱', 50: '5強', 55: '6弱', 60: '6強', 70: '7'
+                45: '5弱', 50: '5強', 55: '6弱', 60: '6強', 65: '6強', 70: '7'
             };
             return scaleMap[scale] || '不明';
         }
@@ -633,7 +679,6 @@
         // 初期実行
         connectWS();
         initP2P().then(() => {
-            // 初期化完了後に10秒おきのポーリングを開始
             setInterval(pollP2P, 10000);
         });
     </script>
