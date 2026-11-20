@@ -353,7 +353,7 @@
             return scaleColorMap[scale] || "#6c757d";
         }
 
-        // --- 都道府県代表座標（P2P points に緯度経度がない場合のフォールバック用） ---
+        // --- 都道府県代表座標（県ごとの最大震度マーカー表示用） ---
         const PREF_COORDS = {
             "北海道": [43.064, 141.347], "青森県": [40.824, 140.740], "岩手県": [39.704, 141.153],
             "宮城県": [38.269, 140.872], "秋田県": [39.719, 140.102], "山形県": [38.240, 140.363],
@@ -456,7 +456,12 @@
                     if (data.type === "heartbeat") return;
 
                     if (data.isCancel) {
-                        appendLog(`【キャンセル報】 ID: ${data.ID || data.EventID || ""}`);
+                        const cancelId = data.EventID || data.ID || null;
+                        if (activeEewId !== null && cancelId !== null && activeEewId !== cancelId) {
+                            appendLog(`【別イベントのキャンセル報を無視】 ID: ${cancelId}`);
+                            return;
+                        }
+                        appendLog(`【キャンセル報】 ID: ${cancelId || ""}`);
                         playSound("eewC.mp3");
                         resetAllLayers();
                         return;
@@ -567,13 +572,13 @@
             alertDetails.innerHTML = `震源: ${esc(hypo)} (深さ: ${esc(depth)})<br>規模: M${esc(mag)} / 最大予想震度: ${esc(maxInt)}`;
 
             currentHypo = { lat: lat, lon: lon };
-            updateMapElements(lat, lon, hypo, mag, maxInt, depth);
+            updateMapElements(lat, lon, hypo, mag, maxInt, depth, !isSameEventUpdate);
 
             if (finalReportTimer) clearTimeout(finalReportTimer);
             finalReportTimer = setTimeout(resetAllLayers, 5 * 60 * 1000);
         }
 
-        function updateMapElements(lat, lon, hypo, mag, maxInt, depth) {
+        function updateMapElements(lat, lon, hypo, mag, maxInt, depth, shouldCenterMap = false) {
             if (hypoMarker) map.removeLayer(hypoMarker);
             if (pWaveCircle) map.removeLayer(pWaveCircle);
             if (sWaveCircle) map.removeLayer(sWaveCircle);
@@ -586,7 +591,9 @@
                 fillOpacity: 1
             }).addTo(map).bindPopup(`<b>震源: ${esc(hypo)}</b><br>深さ: ${esc(depth)} / M${esc(mag)} / 震度${esc(maxInt)}`);
 
-            map.setView([lat, lon], 7);
+            if (shouldCenterMap) {
+                map.setView([lat, lon], 7);
+            }
 
             pWaveCircle = L.circle([lat, lon], { radius: 0, color: '#3bc9db', weight: 1, fillOpacity: 0.1, dashArray: '4, 4' }).addTo(map);
             sWaveCircle = L.circle([lat, lon], { radius: 0, color: '#ff6b6b', weight: 2, fillOpacity: 0.2 }).addTo(map);
@@ -731,34 +738,22 @@
                 if (sortedPoints.length === 0) {
                     pointsContainer.innerHTML = `<span style="color:#adb5bd;">観測点・地域震度データはありません。</span>`;
                 } else {
-                    const prefCounts = {};
+                    const prefMax = {};
+                    points.forEach(p => {
+                        const s = p.scale || 0;
+                        if (p.pref && PREF_COORDS[p.pref] && s > (prefMax[p.pref] ?? -1)) prefMax[p.pref] = s;
+                    });
+                    Object.entries(prefMax).forEach(([pref, scale]) => {
+                        L.circleMarker(PREF_COORDS[pref], {
+                            radius: 8, color: '#111', weight: 1,
+                            fillColor: getScaleColor(scale), fillOpacity: 0.92
+                        }).addTo(p2pLayerGroup).bindPopup(`<b>${esc(pref)}</b><br>最大震度 ${esc(formatScale(scale))}`);
+                    });
+
                     sortedPoints.forEach(p => {
                         const color = getScaleColor(p.scale);
                         const scaleLabel = formatScale(p.scale);
                         const name = p.addr || p.pref || "地域不明";
-
-                        let lat = (typeof p.latitude === "number") ? p.latitude : null;
-                        let lon = (typeof p.longitude === "number") ? p.longitude : null;
-
-                        if ((lat === null || lon === null) && p.pref && PREF_COORDS[p.pref]) {
-                            const [baseLat, baseLon] = PREF_COORDS[p.pref];
-                            const idx = prefCounts[p.pref] || 0;
-                            prefCounts[p.pref] = idx + 1;
-                            const angle = idx * 1.1;
-                            const spread = Math.min(0.25, 0.04 * idx);
-                            lat = baseLat + Math.sin(angle) * spread;
-                            lon = baseLon + Math.cos(angle) * spread;
-                        }
-
-                        if (typeof lat === "number" && typeof lon === "number") {
-                            L.circleMarker([lat, lon], {
-                                radius: 6,
-                                color: '#111',
-                                weight: 1,
-                                fillColor: color,
-                                fillOpacity: 0.92
-                            }).addTo(p2pLayerGroup).bindPopup(`<b>${esc(name)}</b><br>震度 ${esc(scaleLabel)}`);
-                        }
 
                         const badge = document.createElement("span");
                         badge.className = "p2p-point-badge";
